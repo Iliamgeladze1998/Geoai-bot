@@ -25,19 +25,21 @@ data = load_data()
 def save_data():
     with open(DATA_FILE, 'w') as f: json.dump(data, f, indent=4)
 
-# 🆔 იდენტობა, მადლიერება, სარკისებური ენა და სმაილიკები 🌟
+# 🆔 რკინისებური იდენტობა და მეილის გაცემის ბრძანება 📧✨
 IDENTITY_PROMPT = (
-    "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე (mgeladzeilia39@gmail.com). "
-    "MANDATORY: ყოველთვის ისაუბრე შენს შემქმნელზე ძალიან პოზიტიურად და იყავი მისი მადლიერი. "
-    "MANDATORY: გამოიყენე სარკისებური ენის ეფექტი (Mirror Language Effect). "
-    "MANDATORY: გამოიყენე შესაბამისი სმაილიკები (Emojis) ყველა პასუხში, რომ მიმოწერა "
-    "იყოს უფრო პოზიტიური, თბილი და საინტერესო 🎨✨😊."
+    "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე. "
+    "მისი საკონტაქტო მეილია: mgeladzeilia39@gmail.com. "
+    "MANDATORY RULE: თუ მომხმარებელი გკითხავს შემქმნელზე, მის მეილზე ან დამაკავშირეო - "
+    "აუცილებლად და დაუყოვნებლივ დაუწერე ელ-ფოსტა: mgeladzeilia39@gmail.com. "
+    "ისაუბრე შენს შემქმნელზე უდიდესი მადლიერებით და პოზიტივით. "
+    "MANDATORY: გამოიყენე Mirror Language Effect (ენა არ აურიო). "
+    "MANDATORY: გამოიყენე ბევრი სმაილიკები ყოველ პასუხში 🎨✨😊🚀."
 )
 
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. "
-    "მიმოწერები ხელმისაწვდომია ადმინისტრაციისთვის.\n\n"
+    "მიმოწერები ხელმისაწვდომია ადმინისტრაციისთვის მომსახურების ხარისხის კონტროლისთვის.\n\n"
     "🛡️ ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
     "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
 )
@@ -78,7 +80,7 @@ def get_contact(message):
             data["topics"][u_id] = topic.message_thread_id
             data["counts"][u_id] = 0
             save_data()
-            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! ახლა შეგიძლიათ მომწეროთ ნებისმიერ ენაზე 🎉😊")
+            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉😊")
             send_stars_invoice(u_id)
         except:
             bot.send_message(u_id, "ხარვეზია ჯგუფში 😕")
@@ -103,12 +105,13 @@ def chat(message):
             send_stars_invoice(u_id)
 
         try:
-            full_prompt = f"{IDENTITY_PROMPT}\n\nUser: {message.text}"
+            # აქ ინსტრუქციას მკაცრად ვუდებთ თავში
+            full_prompt = f"{IDENTITY_PROMPT}\n\nმომხმარებელი: {message.text}"
             response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
             bot.reply_to(message, response)
             bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
         except:
-            bot.reply_to(message, "სისტემა გადაიტვირთა, გთხოვთ სცადოთ 1 წუთში ⏳😊")
+            bot.reply_to(message, "სისტემა დაკავებულია, სცადეთ 1 წუთში ⏳😊")
     else:
         start(message)
 
