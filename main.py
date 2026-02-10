@@ -7,6 +7,7 @@ ADMIN_GROUP_ID = -1003543241594
 
 bot = telebot.TeleBot(TOKEN)
 user_topics = {} 
+user_phones = {} # ნომრების შესანახად
 message_counts = {}
 
 # ინსტრუქცია AI-სთვის
@@ -33,7 +34,7 @@ def send_stars_invoice(chat_id):
 def start(message):
     markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-    bot.send_message(message.chat.id, "გაიარე ვერიფიკაცია საუბრის დასაწყებად 👇", reply_markup=markup)
+    bot.send_message(message.chat.id, "GeoAI - საუბრისთვის გაიარე ვერიფიკაცია 👇", reply_markup=markup)
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
@@ -41,13 +42,18 @@ def get_contact(message):
         u_id = message.from_user.id
         u_name = message.from_user.first_name
         phone = f"+{message.contact.phone_number}"
+        user_phones[u_id] = phone # ინახავს ნომერს
         message_counts[u_id] = 0
+        
         try:
-            topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
+            # ქმნის Topic-ს სახელით და ნომრით
+            topic_name = f"{u_name} ({phone})"
+            topic = bot.create_forum_topic(ADMIN_GROUP_ID, topic_name)
             user_topics[u_id] = topic.message_thread_id
+            
             bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 😊")
             send_stars_invoice(u_id)
-            bot.send_message(ADMIN_GROUP_ID, "🆕 ახალი იუზერი დარეგისტრირდა!", message_thread_id=user_topics[u_id])
+            bot.send_message(ADMIN_GROUP_ID, f"✅ ახალი იუზერი: {u_name}", message_thread_id=user_topics[u_id])
         except: pass
 
 @bot.message_handler(func=lambda message: True)
@@ -61,21 +67,23 @@ def chat(message):
                 bot.send_message(user_id, message.text)
                 return
 
-    # იუზერის მესიჯის თვლა და ლოგიკა
+    # იუზერის მესიჯის თვლა (40 მესიჯის ლოგიკა)
     message_counts[u_id] = message_counts.get(u_id, 0) + 1
     if message_counts[u_id] % 40 == 0:
         send_stars_invoice(u_id)
 
-    if u_id not in user_topics:
+    # თუ თემა არ არსებობს, ქმნის მას ნომრითურთ
+    if u_id not in user_topics and u_id in user_phones:
         try:
-            topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{message.from_user.first_name}")
+            phone = user_phones.get(u_id, "N/A")
+            topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{message.from_user.first_name} ({phone})")
             user_topics[u_id] = topic.message_thread_id
         except: pass
 
     if u_id in user_topics:
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=user_topics[u_id])
         try:
-            # ინსტრუქციის ჩაშენება პრომპტში
+            # Identity პრომპტი
             full_prompt = f"{instruction}\n\nმომხმარებელი: {message.text}"
             response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
             bot.reply_to(message, response)
