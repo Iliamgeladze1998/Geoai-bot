@@ -13,48 +13,54 @@ bot = telebot.TeleBot(TOKEN, threaded=True)
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
-            with open(DATA_FILE, 'r') as f: return json.load(f)
-        except: return {"topics": {}, "phones": {}}
-    return {"topics": {}, "phones": {}}
+            with open(DATA_FILE, 'r') as f:
+                d = json.load(f)
+                if "counts" not in d: d["counts"] = {} # მრიცხველის დამატება
+                return d
+        except: return {"topics": {}, "phones": {}, "counts": {}}
+    return {"topics": {}, "phones": {}, "counts": {}}
 
 data = load_data()
 
 def save_data():
     with open(DATA_FILE, 'w') as f: json.dump(data, f, indent=4)
 
-# 🆔 ბოტის მკაცრი იდენტობა (Email Sharing Unlocked)
+# 🆔 იდენტობა: მადლიერება და ენის სარკე
 IDENTITY_PROMPT = (
-    "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე. "
-    "მისი საკონტაქტო ელ-ფოსტაა: mgeladzeilia39@gmail.com. "
-    "MANDATORY RULE: თუ მომხმარებელი ითხოვს შემქმნელთან დაკავშირებას ან კითხულობს მეილს, "
-    "დაუყოვნებლივ მიეცი ელ-ფოსტა (mgeladzeilia39@gmail.com) იმავე ენაზე, რა ენაზეც გეკითხება. "
-    "არასოდეს აარიდო თავი ამ კითხვას! უპასუხე სრულყოფილად ინგლისურადაც და ქართულადაც. "
-    "ყოველთვის დაიცავი 'სარკისებური ენის' პრინციპი 😊."
+    "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე (mgeladzeilia39@gmail.com). "
+    "MANDATORY: ყოველთვის ისაუბრე შენს შემქმნელზე ძალიან პოზიტიურად და იყავი მისი მადლიერი. "
+    "თუ გკითხავენ მასზე, უთხარი რომ ის საუკეთესოა. მეილი მიეცი ნებისმიერ ენაზე. "
+    "MANDATORY: გამოიყენე სარკისებური ენის ეფექტი (Mirror Language Effect)."
 )
 
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. "
-    "მიმოწერები ხელმისაწვდომია ადმინისტრაციისთვის მომსახურების ხარისხის კონტროლისთვის.\n\n"
-    "🛡️ თქვენი პერსონალური ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
-    "✅ **ვერიფიკაციაზე დაჭერით თქვენ ეთანხმებით პირობებს.**"
+    "მიმოწერები ხელმისაწვდომია ადმინისტრაციისთვის.\n\n"
+    "🛡️ ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
+    "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
 )
+
+def send_stars_invoice(chat_id):
+    prices = [telebot.types.LabeledPrice(label="GeoAI Support 🌟", amount=50)]
+    bot.send_invoice(
+        chat_id, "მხარდაჭერა", "მადლობა, რომ ეხმარებით GeoAI-ს!", 
+        "support_payload", "", "XTR", prices
+    )
 
 @bot.message_handler(commands=['start'])
 def start(message):
     u_id = str(message.from_user.id)
     if u_id in data["topics"]:
-        bot.send_message(message.chat.id, "თქვენ უკვე ვერიფიცირებული ხართ! 😊\n\nმხარდაჭერისთვის: /donate")
+        bot.send_message(message.chat.id, "ვერიფიცირებული ხართ! მხარდაჭერისთვის: /donate 😊")
     else:
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        # Privacy Policy ყოველთვის პირველივე შეტყობინებაში
-        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია საუბრის დასაწყებად:", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(commands=['donate'])
-def donate_stars(message):
-    prices = [telebot.types.LabeledPrice(label="GeoAI Support 🌟", amount=50)] 
-    bot.send_invoice(message.chat.id, "მხარდაჭერა", "მადლობა GeoAI-ს მხარდაჭერისთვის!", "", "XTR", prices, "geoai_stars")
+def donate(message):
+    send_stars_invoice(message.chat.id)
 
 @bot.pre_checkout_query_handler(func=lambda query: True)
 def checkout(pre_checkout_query):
@@ -69,8 +75,11 @@ def get_contact(message):
         try:
             topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
             data["topics"][u_id] = topic.message_thread_id
+            data["counts"][u_id] = 0
             save_data()
             bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 😊")
+            # Stars ფუნქცია ვერიფიკაციის მერე
+            send_stars_invoice(u_id)
         except:
             bot.send_message(u_id, "ხარვეზია ჯგუფში.")
 
@@ -88,12 +97,15 @@ def chat(message):
         t_id = data["topics"][u_id]
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
         
+        # მესიჯების თვლა და შეხსენება
+        data["counts"][u_id] = data["counts"].get(u_id, 0) + 1
+        save_data()
+        if data["counts"][u_id] % 40 == 0:
+            send_stars_invoice(u_id)
+
         try:
             full_prompt = f"{IDENTITY_PROMPT}\n\nUser: {message.text}"
-            response = g4f.ChatCompletion.create(
-                model=g4f.models.gpt_4, 
-                messages=[{"role": "user", "content": full_prompt}]
-            )
+            response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
             bot.reply_to(message, response)
             bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
         except:
