@@ -36,14 +36,14 @@ instruction = (
     "ისაუბრე ბუნებრივი ქართულით, იყავი პრაგმატული და სხარტი 😊."
 )
 
-# 🔍 ფუნქცია Topic-ის რეალური არსებობის შესამოწმებლად (ნომრის შენარჩუნებით)
+# 🔍 ფუნქცია Topic-ის რეალური არსებობის შესამოწმებლად (მხოლოდ ნომრით)
 def is_topic_active(u_id, u_name):
-    if u_id not in data["topics"]:
+    if u_id not in data["topics"] or u_id not in data["phones"]:
         return False
     try:
         topic_id = data["topics"][u_id]
-        phone = data["phones"].get(u_id, "N/A")
-        # განახლებისას ჩატს ისევ თავის სახელს და ნომერს ვარქმევთ
+        phone = data["phones"][u_id]
+        # 4 ციფრის ნაცვლად აქ ჩაიწერება სახელი და ნომერი
         bot.edit_forum_topic(ADMIN_GROUP_ID, topic_id, name=f"{u_name} ({phone})")
         return True
     except:
@@ -70,6 +70,9 @@ def get_contact(message):
         u_name = message.from_user.first_name
         phone = f"+{message.contact.phone_number}"
         
+        data["phones"][u_id] = phone # ჯერ ვინახავთ ნომერს
+        save_data(data)
+
         if is_topic_active(u_id, u_name):
             bot.send_message(u_id, "ვერიფიკაცია უკვე გავლილი გაქვთ! 😊")
             return
@@ -77,7 +80,6 @@ def get_contact(message):
         try:
             topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
             data["topics"][u_id] = topic.message_thread_id
-            data["phones"][u_id] = phone
             save_data(data)
             bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 😊")
         except:
