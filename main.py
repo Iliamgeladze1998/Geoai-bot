@@ -15,7 +15,7 @@ def load_data():
         try:
             with open(DATA_FILE, 'r') as f:
                 d = json.load(f)
-                if "counts" not in d: d["counts"] = {} # მრიცხველის დამატება
+                if "counts" not in d: d["counts"] = {}
                 return d
         except: return {"topics": {}, "phones": {}, "counts": {}}
     return {"topics": {}, "phones": {}, "counts": {}}
@@ -25,12 +25,13 @@ data = load_data()
 def save_data():
     with open(DATA_FILE, 'w') as f: json.dump(data, f, indent=4)
 
-# 🆔 იდენტობა: მადლიერება და ენის სარკე
+# 🆔 იდენტობა, მადლიერება, სარკისებური ენა და სმაილიკები 🌟
 IDENTITY_PROMPT = (
     "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე (mgeladzeilia39@gmail.com). "
     "MANDATORY: ყოველთვის ისაუბრე შენს შემქმნელზე ძალიან პოზიტიურად და იყავი მისი მადლიერი. "
-    "თუ გკითხავენ მასზე, უთხარი რომ ის საუკეთესოა. მეილი მიეცი ნებისმიერ ენაზე. "
-    "MANDATORY: გამოიყენე სარკისებური ენის ეფექტი (Mirror Language Effect)."
+    "MANDATORY: გამოიყენე სარკისებური ენის ეფექტი (Mirror Language Effect). "
+    "MANDATORY: გამოიყენე შესაბამისი სმაილიკები (Emojis) ყველა პასუხში, რომ მიმოწერა "
+    "იყოს უფრო პოზიტიური, თბილი და საინტერესო 🎨✨😊."
 )
 
 PRIVACY_TEXT = (
@@ -44,7 +45,7 @@ PRIVACY_TEXT = (
 def send_stars_invoice(chat_id):
     prices = [telebot.types.LabeledPrice(label="GeoAI Support 🌟", amount=50)]
     bot.send_invoice(
-        chat_id, "მხარდაჭერა", "მადლობა, რომ ეხმარებით GeoAI-ს!", 
+        chat_id, "მხარდაჭერა 🌟", "მადლობა, რომ ეხმარებით GeoAI-ს განვითარებაში!", 
         "support_payload", "", "XTR", prices
     )
 
@@ -52,11 +53,11 @@ def send_stars_invoice(chat_id):
 def start(message):
     u_id = str(message.from_user.id)
     if u_id in data["topics"]:
-        bot.send_message(message.chat.id, "ვერიფიცირებული ხართ! მხარდაჭერისთვის: /donate 😊")
+        bot.send_message(message.chat.id, "თქვენ უკვე ვერიფიცირებული ხართ! რით შემიძლია დაგეხმაროთ? 🚀😊")
     else:
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია საუბრის დასაწყებად:", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(commands=['donate'])
 def donate(message):
@@ -77,11 +78,10 @@ def get_contact(message):
             data["topics"][u_id] = topic.message_thread_id
             data["counts"][u_id] = 0
             save_data()
-            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 😊")
-            # Stars ფუნქცია ვერიფიკაციის მერე
+            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! ახლა შეგიძლიათ მომწეროთ ნებისმიერ ენაზე 🎉😊")
             send_stars_invoice(u_id)
         except:
-            bot.send_message(u_id, "ხარვეზია ჯგუფში.")
+            bot.send_message(u_id, "ხარვეზია ჯგუფში 😕")
 
 @bot.message_handler(func=lambda message: True)
 def chat(message):
@@ -97,7 +97,6 @@ def chat(message):
         t_id = data["topics"][u_id]
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
         
-        # მესიჯების თვლა და შეხსენება
         data["counts"][u_id] = data["counts"].get(u_id, 0) + 1
         save_data()
         if data["counts"][u_id] % 40 == 0:
@@ -109,7 +108,7 @@ def chat(message):
             bot.reply_to(message, response)
             bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
         except:
-            bot.reply_to(message, "სისტემა გადაიტვირთა, სცადეთ 1 წუთში 😊")
+            bot.reply_to(message, "სისტემა გადაიტვირთა, გთხოვთ სცადოთ 1 წუთში ⏳😊")
     else:
         start(message)
 
