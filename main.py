@@ -9,8 +9,7 @@ TOKEN = '8259258713:AAFtuICqWx6PS7fXCQffsjDNdsE0xj-LL6Q'
 ADMIN_GROUP_ID = -1003543241594 
 DATA_FILE = 'bot_data.json'
 
-# Threaded რეჟიმი და გაზრდილი ვორკერები სისწრაფისთვის
-bot = telebot.TeleBot(TOKEN, threaded=True, num_threads=20)
+bot = telebot.TeleBot(TOKEN, threaded=True, num_threads=25)
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -24,16 +23,14 @@ def save_data(d):
 
 data = load_data()
 
-# იდენტობის და ენის მკაცრი ინსტრუქცია
+# იდენტობა და ენა
 instruction = (
     "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე (ელ-ფოსტა: mgeladzeilia39@gmail.com). "
-    "ყოველთვის ისაუბრე იმ ენაზე, რომელზეც მოგმართავს მომხმარებელი. "
     "MANDATORY: Detect the user's language and respond ONLY in that language. "
-    "If English - respond English. If Georgian - respond Georgian. "
-    "იყავი ძალიან სწრაფი, კონკრეტული და პროფესიონალი 😊."
+    "If the user speaks English, you MUST speak English only. "
+    "იყავი სხარტი, ძალიან სწრაფი და პროფესიონალი 😊."
 )
 
-# 🛡️ პოლიტიკა
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია.\n"
@@ -41,7 +38,7 @@ PRIVACY_TEXT = (
     "✅ **ვერიფიკაციაზე დაჭერით თქვენ ეთანხმებით პირობებს.**"
 )
 
-# 🔍 ჩატის ვალიდაცია (ბლოკავს #General-ს)
+# 🔍 Gatekeeper: ამოწმებს არსებობს თუ არა თემა ჯგუფში
 def is_session_valid(u_id):
     if u_id not in data["topics"]: return False
     try:
@@ -88,31 +85,43 @@ def get_contact(message):
 def chat(message):
     u_id = str(message.from_user.id)
 
+    # ადმინის პასუხი
     if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
         for user_id, t_id in data["topics"].items():
             if t_id == message.message_thread_id:
                 bot.send_message(user_id, message.text)
                 return
 
+    # ვალიდაცია მესიჯის გაპარვის საწინააღმდეგოდ
     if not is_session_valid(u_id):
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
         bot.send_message(message.chat.id, f"სესია განახლდა.\n\n{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
         return
 
+    # 🚀 AI პასუხის გენერაცია
     try:
         t_id = data["topics"][u_id]
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
         
-        # გადავდივართ gpt_4o-ზე სისწრაფისთვის
-        response = g4f.ChatCompletion.create(
-            model=g4f.models.gpt_4o, 
-            messages=[{"role": "system", "content": instruction}, {"role": "user", "content": message.text}]
-        )
-        
-        bot.reply_to(message, response)
-        bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
+        # ვცდილობთ რამდენიმე მოდელს, რომ პასუხი გარანტირებული იყოს
+        response = ""
+        for model in [g4f.models.gpt_4o, g4f.models.gpt_4, g4f.models.default]:
+            try:
+                response = g4f.ChatCompletion.create(
+                    model=model,
+                    messages=[{"role": "system", "content": instruction}, {"role": "user", "content": message.text}]
+                )
+                if response: break
+            except: continue
+
+        if response:
+            bot.reply_to(message, response)
+            bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
+        else:
+            raise Exception("All models failed")
+            
     except:
-        bot.reply_to(message, "ხარვეზია, სცადეთ მოგვიანებით 😊")
+        bot.reply_to(message, "სისტემას ვაახლებ, გთხოვთ მომწეროთ 1 წუთში 😊")
 
 bot.polling(none_stop=True, timeout=120)
