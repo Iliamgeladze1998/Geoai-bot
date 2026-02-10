@@ -3,7 +3,7 @@ import g4f
 import json
 import os
 
-# ძირითადი მონაცემები
+# მონაცემები
 TOKEN = '8259258713:AAFtuICqWx6PS7fXCQffsjDNdsE0xj-LL6Q'
 ADMIN_GROUP_ID = -1003543241594 
 DATA_FILE = 'bot_data.json'
@@ -20,16 +20,16 @@ def load_data():
 data = load_data()
 
 def save_data():
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+    with open(DATA_FILE, 'w') as f: json.dump(data, f, indent=4)
 
-# 🆔 ბოტის პასპორტი და "ენობრივი სარკის" მკაცრი წესი
+# 🆔 ბოტის მკაცრი იდენტობა (Email Sharing Unlocked)
 IDENTITY_PROMPT = (
     "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე. "
     "მისი საკონტაქტო ელ-ფოსტაა: mgeladzeilia39@gmail.com. "
-    "MANDATORY: ყოველთვის უპასუხე იმავე ენაზე, რა ენაზეც გეკითხებიან. "
-    "თუ გკითხავენ შემქმნელზე ან მეილზე ნებისმიერ ენაზე (მაგ. ინგლისურად), "
-    "აუცილებლად გაეცი სრული პასუხი იმავე ენაზე. თავი არ აარიდო პასუხს!"
+    "MANDATORY RULE: თუ მომხმარებელი ითხოვს შემქმნელთან დაკავშირებას ან კითხულობს მეილს, "
+    "დაუყოვნებლივ მიეცი ელ-ფოსტა (mgeladzeilia39@gmail.com) იმავე ენაზე, რა ენაზეც გეკითხება. "
+    "არასოდეს აარიდო თავი ამ კითხვას! უპასუხე სრულყოფილად ინგლისურადაც და ქართულადაც. "
+    "ყოველთვის დაიცავი 'სარკისებური ენის' პრინციპი 😊."
 )
 
 PRIVACY_TEXT = (
@@ -48,7 +48,7 @@ def start(message):
     else:
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        # Privacy Policy ყოველთვის დასაწყისში
+        # Privacy Policy ყოველთვის პირველივე შეტყობინებაში
         bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია საუბრის დასაწყებად:", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(commands=['donate'])
@@ -70,7 +70,7 @@ def get_contact(message):
             topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
             data["topics"][u_id] = topic.message_thread_id
             save_data()
-            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! შეგიძლიათ მომწეროთ ნებისმიერ ენაზე 😊")
+            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 😊")
         except:
             bot.send_message(u_id, "ხარვეზია ჯგუფში.")
 
@@ -89,7 +89,6 @@ def chat(message):
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
         
         try:
-            # ინსტრუქციის მიწოდება პირდაპირ პრომპტში, რომ ენა არ აერიოს
             full_prompt = f"{IDENTITY_PROMPT}\n\nUser: {message.text}"
             response = g4f.ChatCompletion.create(
                 model=g4f.models.gpt_4, 
