@@ -36,11 +36,26 @@ instruction = (
     "ისაუბრე ბუნებრივი ქართულით, იყავი პრაგმატული და სხარტი 😊."
 )
 
+# 🔍 ფუნქცია Topic-ის რეალური არსებობის შესამოწმებლად
+def check_verification(u_id):
+    if u_id not in data["topics"]:
+        return False
+    try:
+        # მკაცრი ტესტი: ვცდილობთ ბეჭდვის იმიტაციას ამ კონკრეტულ თემაში
+        # თუ თემა წაშლილია, აქ მოხდება შეცდომა (Error)
+        bot.send_chat_action(ADMIN_GROUP_ID, 'typing', message_thread_id=data["topics"][u_id])
+        return True
+    except:
+        # თუ აქ მოვიდა, ე.ი. თემა წაშლილია! ვასუფთავებთ ბაზას
+        if u_id in data["topics"]: del data["topics"][u_id]
+        if u_id in data["phones"]: del data["phones"][u_id]
+        save_data(data)
+        return False
+
 @bot.message_handler(commands=['start'])
 def start(message):
     u_id = str(message.from_user.id)
-    # თუ იუზერი ბაზაშია, პირდაპირ მივესალმოთ
-    if u_id in data["topics"]:
+    if check_verification(u_id):
         bot.send_message(message.chat.id, "თქვენ უკვე გაიარეთ ვერიფიკაცია. შეგიძლიათ მწეროთ! 😊")
     else:
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
@@ -54,13 +69,13 @@ def get_contact(message):
         u_name = message.from_user.first_name
         phone = f"+{message.contact.phone_number}"
         
-        # თუ ჩატი უკვე გვიწერია ბაზაში
-        if u_id in data["topics"]:
+        # თუ თემა არსებობს, ახალს აღარ ვქმნით
+        if check_verification(u_id):
             bot.send_message(u_id, "ვერიფიკაცია უკვე გავლილი გაქვთ! 😊")
             return
 
         try:
-            # ვქმნით Topic-ს სახელით და ნომრით
+            # ვქმნით თემას - ეს სახელი და ნომერი იქნება მისი უნიკალური ID
             topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
             data["topics"][u_id] = topic.message_thread_id
             data["phones"][u_id] = phone
@@ -80,32 +95,23 @@ def chat(message):
                 bot.send_message(user_id, message.text)
                 return
 
-    # 🔍 შემოწმება: გვაქვს თუ არა ეს იუზერი ბაზაში?
-    if u_id not in data["topics"]:
+    # 🛑 ყოველი მესიჯისას ვამოწმებთ, ცოცხალია თუ არა ჩატი ჯგუფში
+    if not check_verification(u_id):
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
         bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გთხოვთ, გაიაროთ ვერიფიკაცია საუბრის დასაწყებად:", reply_markup=markup, parse_mode="Markdown")
-        return
+        return # 👈 ეს გააჩერებს მესიჯის გაპარვას #General-ში
 
-    # 🚀 მესიჯის გაგზავნა ჯგუფში (და რეალური შემოწმება)
+    # ✅ თუ თემა არსებობს - AI პასუხი
     try:
         thread_id = data["topics"][u_id]
-        # ვცდილობთ მესიჯის გადაგზავნას ჯგუფის თემაში
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=thread_id)
         
-        # თუ მესიჯი გაიგზავნა, ე.ი. Topic ცოცხალია -> AI პასუხი
         full_prompt = f"{instruction}\n\nმომხმარებელი: {message.text}"
         response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
         bot.reply_to(message, response)
         bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=thread_id)
-        
-    except Exception as e:
-        # თუ ერორია, ესე იგი Topic წაშლილია! (ან ბოტი აღარაა ადმინი)
-        if u_id in data["topics"]: del data["topics"][u_id]
-        save_data(data)
-        
-        markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-        markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        bot.send_message(message.chat.id, "თქვენი საუბრის თემა ჯგუფში ვერ მოიძებნა. გთხოვთ, გაიაროთ ვერიფიკაცია თავიდან 😊", reply_markup=markup)
+    except:
+        bot.reply_to(message, "სისტემას ვანახლებ 😊")
 
 bot.polling(none_stop=True)
