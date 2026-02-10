@@ -4,12 +4,12 @@ import json
 import os
 from telebot.apihelper import ApiTelegramException
 
-# მონაცემები
+# კონფიგურაცია
 TOKEN = '8259258713:AAFtuICqWx6PS7fXCQffsjDNdsE0xj-LL6Q'
 ADMIN_GROUP_ID = -1003543241594 
 DATA_FILE = 'bot_data.json'
 
-# ოპტიმიზებული პოლინგი
+# Threaded=True სწრაფი რეაგირებისთვის
 bot = telebot.TeleBot(TOKEN, threaded=True, num_threads=10)
 
 def load_data():
@@ -24,52 +24,61 @@ def save_data(d):
 
 data = load_data()
 
-# ინსტრუქცია ენის და იდენტობისთვის
-instruction = (
-    "Your name is GeoAI. Your creator is Ilia Mgeladze. "
-    "MANDATORY: Always reply in the EXACT same language as the user. "
-    "If the user speaks English, you MUST speak English only. "
-    "Be professional and concise 😊."
+# 🛡️ პოლიტიკა + ვერიფიკაციის ტექსტი
+PRIVACY_TEXT = (
+    "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
+    "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. "
+    "მიმოწერები ხელმისაწვდომია ადმინისტრაციისთვის მომსახურების ხარისხის კონტროლისთვის.\n\n"
+    "🛡️ ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
+    "✅ **ვერიფიკაციაზე დაჭერით თქვენ ეთანხმებით პირობებს.**"
 )
 
-# 🔍 ჭკვიანი შემოწმება (აგვარებს 1000003870.jpg-ის პრობლემას)
-def check_verification_robust(u_id):
+# 🌍 მკაცრი ინსტრუქცია ენის შესახებ (აგვარებს 1000003866.jpg-ის პრობლემას)
+instruction = (
+    "Your name is GeoAI. Your creator is Ilia Mgeladze. "
+    "SYSTEM RULE: Always respond ONLY in the language the user is currently using. "
+    "If the user speaks English, reply in English. If Georgian, reply in Georgian. "
+    "NEVER mix languages like Russian or others. Be consistent and professional 😊."
+)
+
+# 🔍 მკაცრი შემოწმება (აგვარებს Topic-ის წაშლის დეტექციას)
+def is_verified(u_id):
     if u_id not in data["topics"]:
         return False
     try:
-        # მხოლოდ typing-ს ვამოწმებთ, რომ არ გადავტვირთოთ სისტემა
+        # ვცდილობთ ჩატში მოქმედების იმიტაციას. თუ ჩატი წაშლილია, ტელეგრამი ეგრევე ერორს მოგვცემს.
         bot.send_chat_action(ADMIN_GROUP_ID, 'typing', message_thread_id=data["topics"][u_id])
         return True
     except ApiTelegramException as e:
-        # აი აქაა გასაღები: ვშლით მხოლოდ თუ ტელეგრამი გვეუბნება "Thread not found" (Error 400)
-        if e.error_code == 400 and "thread not found" in e.description.lower():
+        # თუ თემა ვერ მოიძებნა (Error 400), ვშლით მონაცემებს და ვაბრუნებთ False-ს
+        if "thread not found" in e.description.lower():
             if u_id in data["topics"]: del data["topics"][u_id]
             save_data(data)
             return False
-        # თუ სხვა ერორია (მაგ. Timeout/Lag), ვთვლით რომ ჩატი მაინც არსებობს!
-        return True
+        return True # სხვა ერორებისას (ლაგისას) არ ვშლით
     except:
         return True
 
 @bot.message_handler(commands=['start'])
 def start(message):
     u_id = str(message.from_user.id)
-    if check_verification_robust(u_id):
+    if is_verified(u_id):
         bot.send_message(message.chat.id, "თქვენ უკვე გაიარეთ ვერიფიკაცია! 😊")
     else:
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        bot.send_message(message.chat.id, "გთხოვთ, გაიაროთ ვერიფიკაცია საუბრის დასაწყებად 👇", reply_markup=markup)
+        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გთხოვთ, გაიაროთ ვერიფიკაცია საუბრის დასაწყებად:", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
     if message.contact:
-        u_id, u_name = str(message.from_user.id), message.from_user.first_name
+        u_id = str(message.from_user.id)
+        u_name = message.from_user.first_name
         phone = f"+{message.contact.phone_number}"
         
-        # თუ ჩატი უკვე არსებობს, მეორეს აღარ ვქმნით (აგვარებს დუბლიკატებს)
-        if check_verification_robust(u_id):
-            bot.send_message(u_id, "თქვენ უკვე გაქვთ აქტიური ჩატი! 😊")
+        # თუ უკვე არსებობს და ცოცხალია, ახალს არ ვქმნით
+        if is_verified(u_id):
+            bot.send_message(u_id, "ვერიფიკაცია უკვე გავლილი გაქვთ! 😊")
             return
 
         try:
@@ -77,7 +86,7 @@ def get_contact(message):
             data["topics"][u_id] = topic.message_thread_id
             data["phones"][u_id] = phone
             save_data(data)
-            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 😊")
+            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! ახლა შეგიძლიათ მომწეროთ 😊")
         except:
             bot.send_message(u_id, "ხარვეზია ჯგუფში თემის შექმნისას.")
 
@@ -92,24 +101,24 @@ def chat(message):
                 bot.send_message(user_id, message.text)
                 return
 
-    # 🛑 შემოწმება ლაგის გათვალისწინებით
-    if not check_verification_robust(u_id):
+    # 🛑 მთავარი ფილტრი: თუ ჩატი წაშლილია, ვაჩვენებთ Privacy Policy-ს და ვბლოკავთ საუბარს
+    if not is_verified(u_id):
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        bot.send_message(message.chat.id, "სესია განახლდა. გთხოვთ, გაიაროთ ვერიფიკაცია 👇", reply_markup=markup)
+        bot.send_message(message.chat.id, f"თქვენი სესია განახლდა.\n\n{PRIVACY_TEXT}\n\n👇 გთხოვთ, გაიაროთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
         return
 
+    # 🚀 AI პასუხი და გადაგზავნა
     try:
         t_id = data["topics"][u_id]
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
         
-        response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, 
-                                            messages=[{"role": "user", "content": f"{instruction}\n\nUser: {message.text}"}])
+        full_prompt = f"{instruction}\n\nUser: {message.text}"
+        response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
         
         bot.reply_to(message, response)
         bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
     except:
         bot.reply_to(message, "ხარვეზია, სცადეთ მოგვიანებით 😊")
 
-# გაზრდილი ტაიმაუტი სტაბილური კავშირისთვის
-bot.polling(none_stop=True, timeout=123)
+bot.polling(none_stop=True, timeout=120)
