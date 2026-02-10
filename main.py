@@ -24,11 +24,11 @@ def save_data():
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=4)
 
-# AI-ს იდენტობა
+# 🌍 იდენტობა (ილია მგელაძე, mgeladzeilia39@gmail.com)
 instruction = (
     "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე (mgeladzeilia39@gmail.com). "
     "ყოველთვის უპასუხე იმავე ენაზე, რაზეც მომხმარებელი გწერს. "
-    "იყავი სწრაფი, ზუსტი და მეგობრული 😊."
+    "იყავი ზუსტი და მეგობრული 😊."
 )
 
 PRIVACY_TEXT = (
@@ -41,7 +41,6 @@ PRIVACY_TEXT = (
 @bot.message_handler(commands=['start'])
 def start(message):
     u_id = str(message.from_user.id)
-    # თუ მეხსიერებაშია, აღარაფერს ვთხოვთ
     if u_id in data["topics"]:
         bot.send_message(message.chat.id, "თქვენ უკვე ვერიფიცირებული ხართ! რით შემიძლია დაგეხმაროთ? 😊")
     else:
@@ -56,7 +55,6 @@ def get_contact(message):
         u_name = message.from_user.first_name
         phone = f"+{message.contact.phone_number}"
         try:
-            # ვქმნით ტოპიკს ერთხელ და სამუდამოდ
             topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
             data["topics"][u_id] = topic.message_thread_id
             save_data()
@@ -68,29 +66,28 @@ def get_contact(message):
 def chat(message):
     u_id = str(message.from_user.id)
 
-    # ადმინის პასუხის გადაგზავნა იუზერთან
+    # ადმინის პასუხი
     if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
         for user_id, t_id in data["topics"].items():
             if t_id == message.message_thread_id:
                 bot.send_message(user_id, message.text)
                 return
 
-    # იუზერის მესიჯის დამუშავება
+    # იუზერის მიმოწერის ლოგიკა
     if u_id in data["topics"]:
         t_id = data["topics"][u_id]
-        # ვაგზავნით ადმინთან
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
         
-        # AI პასუხი (GPT-4o სისწრაფისთვის)
         try:
+            # 🔄 ვაბრუნებთ სტაბილურ GPT-4-ს
             response = g4f.ChatCompletion.create(
-                model=g4f.models.gpt_4o,
+                model=g4f.models.gpt_4, # 👈 დაბრუნდა სტაბილური მოდელი
                 messages=[{"role": "system", "content": instruction}, {"role": "user", "content": message.text}]
             )
             bot.reply_to(message, response)
             bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
         except:
-            bot.reply_to(message, "სისტემა დაკავებულია, სცადეთ თავიდან 😊")
+            bot.reply_to(message, "სისტემა გადაიტვირთა, სცადეთ 1 წუთში 😊")
     else:
         start(message)
 
