@@ -101,4 +101,12 @@ def chat(message):
     # 🚀 თუ ყველაფერი რიგზეა - AI პასუხი და გადაგზავნა
     try:
         full_prompt = f"{instruction}\n\nმომხმარებელი: {message.text}"
-        response = g4
+        response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
+        bot.reply_to(message, response)
+        
+        # ვაგზავნით მესიჯს მხოლოდ და მხოლოდ დადასტურებულ Topic-ში
+        bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}\n\n🤖 GeoAI: {response}", message_thread_id=data["topics"][u_id])
+    except:
+        bot.reply_to(message, "ხარვეზია, სცადეთ მოგვიანებით 😊")
+
+bot.polling(none_stop=True)
