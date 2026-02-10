@@ -30,21 +30,21 @@ PRIVACY_TEXT = (
     "✅ **ვერიფიკაციაზე დაჭერით თქვენ ეთანხმებით პირობებს.**"
 )
 
+# განახლებული ინსტრუქცია ენობრივი მოქნილობისთვის
 instruction = (
     "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე. "
-    "ისაუბრე ბუნებრივი ქართულით, იყავი პრაგმატული და სხარტი 😊."
+    "ყოველთვის უპასუხე იმავე ენაზე, რა ენაზეც მოგმართავს მომხმარებელი (თუ კითხვა ქართულია - ქართულად, თუ ინგლისურია - ინგლისურად). "
+    "თუ მომხმარებელი გთხოვს კონკრეტულ ენაზე საუბარს, შეასრულე თხოვნა, მაგრამ არ შეცვალო ძირითადი ენა სამუდამოდ, სანამ მომხმარებელი ამას პირდაპირ არ მოითხოვს. "
+    "იყავი პრაგმატული, სხარტი და პროფესიონალი 😊."
 )
 
-# 🔍 ფუნქცია Topic-ის რეალური არსებობის შესამოწმებლად
 def check_topic(u_id):
     if u_id not in data["topics"]:
         return False
     try:
-        # ვიყენებთ მსუბუქ შემოწმებას, რომ არ მოხდეს Loop
         bot.send_chat_action(ADMIN_GROUP_ID, 'typing', message_thread_id=data["topics"][u_id])
         return True
     except:
-        # მხოლოდ თუ ტელეგრამი ერორს მოგვცემს, მაშინ ვშლით
         if u_id in data["topics"]: del data["topics"][u_id]
         save_data(data)
         return False
@@ -52,7 +52,6 @@ def check_topic(u_id):
 @bot.message_handler(commands=['start'])
 def start(message):
     u_id = str(message.from_user.id)
-    # ყოველთვის ვაჩვენებთ პოლიტიკას და ღილაკს, თუ ვერიფიკაცია არაა
     if check_topic(u_id):
         bot.send_message(message.chat.id, "თქვენ უკვე გაიარეთ ვერიფიკაცია. შეგიძლიათ მწეროთ! 😊")
     else:
@@ -68,7 +67,6 @@ def get_contact(message):
         phone = f"+{message.contact.phone_number}"
         
         try:
-            # ვქმნით Topic-ს - სახელი + ნომერი
             topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
             data["topics"][u_id] = topic.message_thread_id
             data["phones"][u_id] = phone
@@ -81,21 +79,18 @@ def get_contact(message):
 def chat(message):
     u_id = str(message.from_user.id)
 
-    # ადმინის პასუხი
     if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
         for user_id, thread_id in data["topics"].items():
             if thread_id == message.message_thread_id:
                 bot.send_message(user_id, message.text)
                 return
 
-    # 🛑 შემოწმება ყოველ მესიჯზე
     if not check_topic(u_id):
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
         bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გთხოვთ, გაიაროთ ვერიფიკაცია საუბრის დასაწყებად:", reply_markup=markup, parse_mode="Markdown")
         return
 
-    # 🚀 AI პასუხი
     try:
         thread_id = data["topics"][u_id]
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=thread_id)
@@ -105,6 +100,6 @@ def chat(message):
         bot.reply_to(message, response)
         bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=thread_id)
     except:
-        bot.reply_to(message, "სისტემას ვანახლებ 😊")
+        bot.reply_to(message, "ხარვეზია, სცადეთ მოგვიანებით 😊")
 
 bot.polling(none_stop=True)
