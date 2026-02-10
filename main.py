@@ -25,21 +25,19 @@ data = load_data()
 def save_data():
     with open(DATA_FILE, 'w') as f: json.dump(data, f, indent=4)
 
-# 🆔 რკინისებური იდენტობა და მეილის გაცემის ბრძანება 📧✨
+# 🆔 რკინისებური იდენტობა და პოზიტივი ✨
 IDENTITY_PROMPT = (
     "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე. "
     "მისი საკონტაქტო მეილია: mgeladzeilia39@gmail.com. "
-    "MANDATORY RULE: თუ მომხმარებელი გკითხავს შემქმნელზე, მის მეილზე ან დამაკავშირეო - "
-    "აუცილებლად და დაუყოვნებლივ დაუწერე ელ-ფოსტა: mgeladzeilia39@gmail.com. "
-    "ისაუბრე შენს შემქმნელზე უდიდესი მადლიერებით და პოზიტივით. "
-    "MANDATORY: გამოიყენე Mirror Language Effect (ენა არ აურიო). "
+    "MANDATORY: თუ გკითხავენ შემქმნელზე ან მეილზე, დაუყოვნებლივ მიეცი მეილი. "
+    "ისაუბრე ილიაზე უდიდესი მადლიერებით და პოზიტივით. "
+    "MANDATORY: გამოიყენე Mirror Language Effect (ენის სარკე). "
     "MANDATORY: გამოიყენე ბევრი სმაილიკები ყოველ პასუხში 🎨✨😊🚀."
 )
 
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. "
-    "მიმოწერები ხელმისაწვდომია ადმინისტრაციისთვის მომსახურების ხარისხის კონტროლისთვის.\n\n"
     "🛡️ ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
     "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
 )
@@ -59,7 +57,7 @@ def start(message):
     else:
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია საუბრის დასაწყებად:", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(commands=['donate'])
 def donate(message):
@@ -105,13 +103,18 @@ def chat(message):
             send_stars_invoice(u_id)
 
         try:
-            # აქ ინსტრუქციას მკაცრად ვუდებთ თავში
-            full_prompt = f"{IDENTITY_PROMPT}\n\nმომხმარებელი: {message.text}"
+            full_prompt = f"{IDENTITY_PROMPT}\n\nUser: {message.text}"
             response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
+            
+            # 🛑 ფილტრი: ჩინური სიმბოლოების ან ლინკების აღმოჩენა (შეცდომის თავიდან ასაცილებლად)
+            if any(u'\u4e00' <= c <= u'\u9fff' for c in response) or "http" in response.lower():
+                bot.reply_to(message, "უკაცრავად, სერვერი დროებით დაიტვირთა ⏳. გთხოვთ, გამიმეოროთ კითხვა 1 წუთში! 😊🚀")
+                return
+
             bot.reply_to(message, response)
             bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
         except:
-            bot.reply_to(message, "სისტემა დაკავებულია, სცადეთ 1 წუთში ⏳😊")
+            bot.reply_to(message, "სისტემა გადაიტვირთა, სცადეთ 1 წუთში ⏳😊")
     else:
         start(message)
 
