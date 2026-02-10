@@ -17,43 +17,30 @@ def load_data():
         except: return {"topics": {}, "phones": {}}
     return {"topics": {}, "phones": {}}
 
-def save_data(data_to_save):
-    with open(DATA_FILE, 'w') as f: json.dump(data_to_save, f)
+def save_data(d):
+    with open(DATA_FILE, 'w') as f: json.dump(d, f)
 
 data = load_data()
 
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. "
-    "მიმოწერები ხელმისაწვდომია ადმინისტრაციისთვის ხარისხის კონტროლისთვის.\n\n"
+    "მიმოწერები ხელმისაწვდომია ადმინისტრაციისთვის მომსახურების ხარისხის კონტროლისთვის.\n\n"
     "🛡️ ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
     "✅ **ვერიფიკაციაზე დაჭერით თქვენ ეთანხმებით პირობებს.**"
 )
 
 instruction = (
     "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე. "
+    "მიეცი ეს მეილი: mgeladzeilia39@gmail.com. "
     "ისაუბრე ბუნებრივი ქართულით, იყავი პრაგმატული და სხარტი 😊."
 )
 
-# ფუნქცია თემის შესამოწმებლად
-def check_topic_exists(u_id):
-    if u_id not in data["topics"]: return False
-    try:
-        # უბრალოდ ვამოწმებთ, შეუძლია თუ არა ბოტს ამ თემაში "მოქმედება"
-        bot.send_chat_action(ADMIN_GROUP_ID, 'typing', message_thread_id=data["topics"][u_id])
-        return True
-    except:
-        return False
-
 @bot.message_handler(commands=['start'])
 def start(message):
-    u_id = str(message.from_user.id)
-    if check_topic_exists(u_id):
-        bot.send_message(message.chat.id, "თქვენ უკვე გაიარეთ ვერიფიკაცია. შეგიძლიათ მწეროთ! 😊")
-    else:
-        markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-        markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
+    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
+    bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
@@ -62,10 +49,13 @@ def get_contact(message):
         u_name = message.from_user.first_name
         phone = f"+{message.contact.phone_number}"
         
-        # 🔍 თუ ჩატი უკვე არსებობს და ცოცხალია, ახალს აღარ ვქმნით
-        if check_topic_exists(u_id):
-            bot.send_message(u_id, "ვერიფიკაცია უკვე გავლილი გაქვთ! 😊")
-            return
+        # თუ უკვე არსებობს და ცოცხალია
+        if u_id in data["topics"]:
+            try:
+                bot.edit_forum_topic(ADMIN_GROUP_ID, data["topics"][u_id], name=f"{u_name} ({phone})")
+                bot.send_message(u_id, "ვერიფიკაცია უკვე გავლილი გაქვთ! 😊")
+                return
+            except: pass
 
         try:
             topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
@@ -80,30 +70,35 @@ def get_contact(message):
 def chat(message):
     u_id = str(message.from_user.id)
 
+    # ადმინის პასუხი (ამას არ ვეხებით)
     if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
         for user_id, thread_id in data["topics"].items():
             if thread_id == message.message_thread_id:
                 bot.send_message(user_id, message.text)
                 return
 
-    # 🛑 ვამოწმებთ, აქვს თუ არა ვალიდური ჩატი
-    if not check_topic_exists(u_id):
-        # თუ არ აქვს, ვშლით ძველ ნაგავს და ვთხოვთ ვერიფიკაციას
-        if u_id in data["topics"]: del data["topics"][u_id]
-        save_data(data)
-        
+    # 🔍 მკაცრი ვალიდაცია: თუ ჩატი წაშლილია, ეგრევე ვბლოკავთ
+    is_verified = False
+    if u_id in data["topics"] and u_id in data["phones"]:
+        try:
+            # ვცდილობთ ჩატის პარამეტრის განახლებას. თუ ჩატი წაშლილია, აქ მოხდება ერორი.
+            bot.edit_forum_topic(ADMIN_GROUP_ID, data["topics"][u_id], name=f"{message.from_user.first_name} ({data['phones'][u_id]})")
+            is_verified = True
+        except:
+            # ჩატი წაშლილია - ვშლით მონაცემებს
+            if u_id in data["topics"]: del data["topics"][u_id]
+            if u_id in data["phones"]: del data["phones"][u_id]
+            save_data(data)
+            is_verified = False
+    
+    # 🛑 მთავარი ფილტრი: თუ ვერიფიკაცია არაა, მესიჯი ჯგუფამდე საერთოდ ვერ მიდის
+    if not is_verified:
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
         bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გთხოვთ, გაიაროთ ვერიფიკაცია საუბრის დასაწყებად:", reply_markup=markup, parse_mode="Markdown")
-        return
+        return # 👈 ეს Return არის ყველაზე მნიშვნელოვანი, ის აჩერებს მესიჯის გაპარვას General-ში
 
-    # 🚀 AI პასუხი
+    # 🚀 თუ ყველაფერი რიგზეა - AI პასუხი და გადაგზავნა
     try:
         full_prompt = f"{instruction}\n\nმომხმარებელი: {message.text}"
-        response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
-        bot.reply_to(message, response)
-        bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}\n\n🤖 GeoAI: {response}", message_thread_id=data["topics"][u_id])
-    except:
-        bot.reply_to(message, "სისტემას ვანახლებ 😊")
-
-bot.polling(none_stop=True)
+        response = g4
