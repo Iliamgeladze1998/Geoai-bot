@@ -20,19 +20,17 @@ def save_data(data):
 
 data = load_data()
 
-# განახლებული კონფიდენციალურობის პოლიტიკა
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. "
-    "გაცნობებთ, რომ თქვენი მიმოწერები შესაძლოა ხელმისაწვდომი იყოს "
-    "ადმინისტრაციისთვის მომსახურების ხარისხის გაუმჯობესების მიზნით.\n\n"
-    "🛡️ თქვენი პერსონალური ინფორმაცია და ნომერი არ გადაეცემა მესამე პირებს.\n\n"
-    "✅ **ვერიფიკაციაზე დაჭერით თქვენ ეთანხმებით აღნიშნულ პირობებს.**"
+    "თქვენი მიმოწერები შესაძლოა ხელმისაწვდომი იყოს ადმინისტრაციისთვის "
+    "მომსახურების ხარისხის გაუმჯობესების მიზნით.\n\n"
+    "🛡️ ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
+    "✅ **ვერიფიკაციაზე დაჭერით თქვენ ეთანხმებით პირობებს.**"
 )
 
 instruction = (
     "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე. "
-    "მიეცი ეს მეილი: mgeladzeilia39@gmail.com. "
     "ისაუბრე ბუნებრივი ქართულით, იყავი პრაგმატული და სხარტი 😊."
 )
 
@@ -40,7 +38,7 @@ instruction = (
 def start(message):
     markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-    bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია საუბრის დასაწყებად:", reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
@@ -62,35 +60,41 @@ def get_contact(message):
 def chat(message):
     u_id = str(message.from_user.id)
 
+    # ადმინის პასუხი
     if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
         for user_id, thread_id in data["topics"].items():
             if thread_id == message.message_thread_id:
                 bot.send_message(user_id, message.text)
                 return
 
-    # რეალური შემოწმება - არსებობს თუ არა Topic?
+    # 🔍 მკაცრი შემოწმება: არსებობს თუ არა Topic რეალურად?
     is_verified = False
     if u_id in data["topics"]:
         thread_id = data["topics"][u_id]
         try:
-            test_msg = bot.send_message(ADMIN_GROUP_ID, ".", message_thread_id=thread_id)
-            bot.delete_message(ADMIN_GROUP_ID, test_msg.message_id)
+            # ვამოწმებთ Topic-ის სტატუსს (Action-ის გაგზავნით)
+            bot.send_chat_action(ADMIN_GROUP_ID, 'typing', message_thread_id=thread_id)
             is_verified = True
         except:
+            # თუ აქ მოვიდა, ნიშნავს რომ Topic ფიზიკურად წაშლილია!
             if u_id in data["topics"]: del data["topics"][u_id]
             if u_id in data["phones"]: del data["phones"][u_id]
             save_data(data)
+            is_verified = False
 
+    # 🛑 თუ ვერიფიკაცია არაა ან Topic წაშლილია - ბლოკავს ყველაფერს
     if not is_verified:
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
         bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გთხოვთ, გაიაროთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
         return
 
+    # 🚀 თუ აქამდე მოვიდა, ნიშნავს რომ Topic ნამდვილად არსებობს
     try:
         full_prompt = f"{instruction}\n\nმომხმარებელი: {message.text}"
         response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
         bot.reply_to(message, response)
+        # ვაგზავნით მესიჯს მხოლოდ დადასტურებულ thread_id-ზე
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}\n\n🤖 GeoAI: {response}", message_thread_id=data["topics"][u_id])
     except:
         bot.reply_to(message, "ხარვეზია, სცადეთ მოგვიანებით 😊")
