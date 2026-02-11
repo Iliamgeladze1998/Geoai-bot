@@ -82,4 +82,66 @@ def send_stars_invoice(chat_id):
     prices = [telebot.types.LabeledPrice(label="GeoAI Support 🌟", amount=50)]
     try:
         bot.send_invoice(
-            chat_id, "მხარდაჭერა 🌟", "მადლობა, რომ ეხმარებით GeoAI-ს განვითარებაში!",
+            chat_id, "მხარდაჭერა 🌟", "მადლობა, რომ ეხმარებით GeoAI-ს განვითარებაში!", 
+            "support_payload", "", "XTR", prices
+        )
+    except: pass
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    u_id = str(message.from_user.id)
+    if u_id in data["topics"]:
+        bot.send_message(message.chat.id, "თქვენ უკვე ვერიფიცირებული ხართ! რით შემიძლია დაგეხმაროთ? 🚀😊")
+    else:
+        markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+        markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
+        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
+
+@bot.message_handler(content_types=['contact'])
+def get_contact(message):
+    u_id = str(message.from_user.id)
+    if message.contact and u_id not in data["topics"]:
+        u_name = message.from_user.first_name
+        phone = f"+{message.contact.phone_number}"
+        try:
+            topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
+            data["topics"][u_id] = topic.message_thread_id
+            data["counts"][u_id] = 0
+            save_data()
+            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉😊")
+            send_stars_invoice(u_id)
+        except:
+            bot.send_message(u_id, "ხარვეზია ვერიფიკაციისას 😕")
+
+@bot.message_handler(func=lambda message: True)
+def chat(message):
+    u_id = str(message.from_user.id)
+
+    # ადმინისტრატორის პასუხი
+    if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
+        for user_id, t_id in data["topics"].items():
+            if t_id == message.message_thread_id:
+                bot.send_message(user_id, message.text)
+                return
+
+    # მომხმარებლის შეტყობინება
+    if u_id in data["topics"]:
+        t_id = data["topics"][u_id]
+        bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
+        
+        # ინვოისის ლოგიკა
+        data["counts"][u_id] = data["counts"].get(u_id, 0) + 1
+        save_data()
+        if data["counts"][u_id] % 40 == 0:
+            send_stars_invoice(u_id)
+
+        # AI პასუხი OpenRouter-ის მეშვეობით
+        bot.send_chat_action(message.chat.id, 'typing')
+        response = get_ai_response(message.text)
+        
+        bot.reply_to(message, response)
+        bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
+    else:
+        start(message)
+
+bot.polling(none_stop=True)
