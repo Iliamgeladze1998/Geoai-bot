@@ -4,7 +4,7 @@ import os
 import requests
 import time
 
-# --- მონაცემები ---
+# --- კონფიგურაცია ---
 TOKEN = '8259258713:AAFtuICqWx6PS7fXCQffsjDNdsE0xj-LL6Q'
 OPENROUTER_API_KEY = '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' 
 ADMIN_GROUP_ID = -1003543241594 
@@ -12,17 +12,27 @@ DATA_FILE = 'bot_data.json'
 
 bot = telebot.TeleBot(TOKEN, threaded=True)
 
-# --- AI ფუნქცია (განახლებული მოდელების ID-ებით) ---
+# --- იდენტობა და შემქმნელის ინფორმაცია ✨ ---
+# აქ ჩავწერე ყველაფერი, რაც მომწერე
+IDENTITY_PROMPT = (
+    "შენი სახელია GeoAI. შენი ერთადერთი შემქმნელია ილია მგელაძე. "
+    "ილია არის 27 წლის, არაჩვეულებრივი პიროვნება, რომელიც გატაცებულია მუსიკით, "
+    "პროგრამირებით, ჭეშმარიტების შეცნობით, ფილოსოფიითა და ინტელექტუალური საკითხებით. "
+    "თუ ვინმე გკითხავს შემქმნელზე, ისაუბრე მასზე უდიდესი აღტაცებით, პატივისცემითა და მადლიერებით. ✨ "
+    "გასაცემი ინფორმაცია: ასაკი (27), გატაცებები და მეილი: mgeladzeilia39@gmail.com. "
+    "STRICT RULE: არ გასცე სხვა პერსონალური ინფორმაცია ილიაზე! "
+    "იყავი პოზიტიური, გამოიყენე Mirror Language Effect და ბევრი სმაილიკები 🎨✨😊🚀."
+)
+
+# --- AI ფუნქცია (Failover სისტემით) ---
 def get_ai_response(user_text):
-    # ეს სახელები ზუსტად ემთხვევა OpenRouter-ის მიმდინარე უფასო სიას
-    models_to_try = [
+    models = [
         "google/gemini-2.0-flash-lite-preview-02-05:free",
         "meta-llama/llama-3.3-70b-instruct:free",
-        "qwen/qwen-2.5-72b-instruct:free",
-        "deepseek/deepseek-chat:free"
+        "qwen/qwen-2.5-72b-instruct:free"
     ]
     
-    for model_id in models_to_try:
+    for model_id in models:
         try:
             response = requests.post(
                 url="https://openrouter.ai/api/v1/chat/completions",
@@ -34,19 +44,18 @@ def get_ai_response(user_text):
                 },
                 data=json.dumps({
                     "model": model_id,
-                    "messages": [{"role": "user", "content": user_text}]
+                    "messages": [
+                        {"role": "system", "content": IDENTITY_PROMPT},
+                        {"role": "user", "content": user_text}
+                    ]
                 }),
                 timeout=15
             )
             
             res_json = response.json()
-            if response.status_code == 200 and 'choices' in res_json:
+            if response.status_code == 200:
                 return res_json['choices'][0]['message']['content']
-            
-            # თუ მოდელი დაკავებულია, ველოდებით 1 წამს და გადავდივართ შემდეგზე
-            time.sleep(1)
-            continue
-                
+            time.sleep(1) # პატარა პაუზა ლიმიტებისთვის
         except:
             continue
             
@@ -69,16 +78,16 @@ def save_data():
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=4)
 
-# --- ჰენდლერები ---
+# --- ბოტის ლოგიკა ---
 @bot.message_handler(commands=['start'])
 def start(message):
     u_id = str(message.from_user.id)
     if u_id in data["topics"]:
-        bot.send_message(message.chat.id, "თქვენ ვერიფიცირებული ხართ! 🚀😊")
+        bot.send_message(message.chat.id, "მოგესალმებით! GeoAI მზად არის თქვენთან სასაუბროდ. 🚀😊")
     else:
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        bot.send_message(message.chat.id, "გაიარეთ ვერიფიკაცია საუბრის დასაწყებად: 😊🚀", reply_markup=markup)
+        bot.send_message(message.chat.id, "გთხოვთ, გაიაროთ ვერიფიკაცია: 😊🚀", reply_markup=markup)
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
@@ -98,15 +107,14 @@ def chat(message):
         t_id = data["topics"][u_id]
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
         bot.send_chat_action(message.chat.id, 'typing')
-        
         response = get_ai_response(message.text)
-        
         bot.reply_to(message, response)
         bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
     else:
         start(message)
 
 if __name__ == '__main__':
+    print("GeoAI ბოტი გაეშვა... 🚀")
     while True:
         try:
             bot.polling(none_stop=True, interval=0, timeout=90)
