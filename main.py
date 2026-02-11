@@ -1,44 +1,35 @@
 import telebot
 import json
 import os
-import requests
 import time
-import urllib3
+import g4f
 
-# უსაფრთხოების გაფრთხილების გათიშვა (Koyeb-ისთვის)
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# --- ახალი ტოკენი ჩასმულია! ---
+# --- შენი ახალი ტოკენი ---
 TOKEN = '8259258713:AAGIzuvaxrzqjaQYTbetApYWKw_jkWUdz_M'
-OPENROUTER_API_KEY = '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' 
 ADMIN_GROUP_ID = -1003543241594 
 DATA_FILE = 'bot_data.json'
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
-# --- იდენტობა (სრული ვერსია) ✨ ---
+# --- იდენტობა (შემქმნელის სრული ინფო) ---
 IDENTITY_PROMPT = (
     "შენი სახელია GeoAI. შენ ხარ მეგობრული ქართველი ასისტენტი. "
     "თუ გკითხავენ 'რა გქვია?', უპასუხე: 'მე მქვია GeoAI' 😊. "
-    "შენი ერთადერთი შემქმნელია ილია მგელაძე. მასზე ისაუბრე მხოლოდ მაშინ, როცა გკითხავენ. "
-    "ილიაზე ინფორმაცია: 27 წლისაა, გატაცებულია მუსიკით, პროგრამირებით, ჭეშმარიტების შეცნობით და ფილოსოფიით. ✨ "
+    "შენი შემქმნელია ილია მგელაძე. მასზე ისაუბრე მხოლოდ მაშინ, როცა გკითხავენ. "
+    "ინფორმაცია ილიაზე: 27 წლისაა, გატაცებულია მუსიკით, პროგრამირებით, ჭეშმარიტების შეცნობით და ფილოსოფიით. ✨ "
     "ილიაზე ისაუბრე მადლიერებით და პოზიტივით. "
     "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. "
-    "STRICT RULE: არ გასცე სხვა პერსონალური ინფორმაცია ილიაზე! "
-    "იყავი ადეკვატური, უპასუხე კონკრეტულად და გამოიყენე სმაილიკები 🎨✨😊🚀."
 )
 
-# --- Privacy Policy (სრული ვერსია) ---
+# --- განახლებული კონფიდენციალურობის პოლიტიკა ---
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
-    "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. \n\n"
-    "⚠️ **ყურადღება:** თქვენი მონაცემები და ჩატში გაზიარებული ინფორმაცია ხელმისაწვდომია ადმინისტრაციისთვის. "
-    "ეს აუცილებელია მომსახურების ხარისხის გასაუმჯობესებლად და უსაფრთხოებისთვის. \n\n"
-    "🛡️ ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
-    "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
+    "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია.\n\n"
+    "⚠️ **გაფრთხილება:** თქვენი ტელეფონის ნომერი და ბოტთან ნებისმიერი მიმოწერა **ხელმისაწვდომია ადმინისტრაციისთვის** (უსაფრთხოებისა და ხარისხის მიზნით).\n\n"
+    "✅ **ღილაკზე „ვერიფიკაცია“ დაჭერით თქვენ ადასტურებთ, რომ ეთანხმებით ამ პირობებს.**"
 )
 
-# --- მონაცემების მართვა ---
+# --- მონაცემები ---
 def load_data():
     if not os.path.exists(DATA_FILE): return {"topics": {}}
     try:
@@ -50,67 +41,39 @@ def save_data(data):
         with open(DATA_FILE, 'w') as f: json.dump(data, f, indent=4)
     except: pass
 
-# --- AI ფუნქცია (განახლებული, მუშა მოდელებით) ---
+# --- AI ფუნქცია (G4F - ძველი და სანდო) ---
 def get_ai_response(user_text):
-    # განახლებული სია (სწორი სახელებით, რომ 404 არ ამოაგდოს)
-    models = [
-        "google/gemini-2.0-flash-exp:free",      # ყველაზე სანდო Gemini ამ წუთას
-        "mistralai/mistral-7b-instruct:free",    # ყველაზე სტაბილური ევროპული მოდელი
-        "meta-llama/llama-3-8b-instruct:free",   # Meta-ს კლასიკა
-        "microsoft/phi-3-medium-128k-instruct:free" # Microsoft backup
-    ]
+    try:
+        # ავტომატური არჩევა
+        response = g4f.ChatCompletion.create(
+            model=g4f.models.default,
+            messages=[
+                {"role": "system", "content": IDENTITY_PROMPT},
+                {"role": "user", "content": user_text}
+            ],
+        )
+        if response:
+            return response
+    except Exception as e:
+        print(f"G4F Error: {e}")
+        return "❌ ცოტა დავიღალე, თავიდან მომწერე? 😊"
     
-    errors = []
-
-    for model_id in models:
-        try:
-            response = requests.post(
-                url="https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://koyeb.com",
-                    "X-Title": "GeoAI"
-                },
-                data=json.dumps({
-                    "model": model_id,
-                    "messages": [
-                        {"role": "system", "content": IDENTITY_PROMPT},
-                        {"role": "user", "content": user_text}
-                    ]
-                }),
-                timeout=15,
-                verify=False
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'choices' in data:
-                    return data['choices'][0]['message']['content']
-            else:
-                errors.append(f"{model_id}: {response.status_code}")
-                
-        except Exception as e:
-            continue
-
-    # თუ ყველა მოდელმა უარი თქვა, მხოლოდ მაშინ გიგზავნის ერორს
-    return f"❌ ყველა სერვერი დაკავებულია.\nდეტალები: {', '.join(errors)}"
+    return "❌ სისტემა გადატვირთულია."
 
 # --- ჰენდლერები ---
 @bot.message_handler(commands=['start'])
 def start(message):
     try:
-        # შლის ძველ ვებჰუკებს (409 ერორის პრევენცია)
         bot.delete_webhook(drop_pending_updates=True)
-        
         u_id = str(message.from_user.id)
         data = load_data()
         
         if u_id in data.get("topics", {}):
-            bot.send_message(message.chat.id, "GeoAI მზად არის! 🚀\nრით შემიძლია დაგეხმაროთ?")
+            bot.send_message(message.chat.id, "GeoAI მზად არის! 🚀")
         else:
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
+            # აქ გაეგზავნება განახლებული ტექსტი!
             bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
     except: pass
 
@@ -133,8 +96,7 @@ def get_contact(message):
             data["topics"][u_id] = t_id
             save_data(data)
             
-            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉😊")
-            # აქ არაფერს ვამატებთ ზედმეტს
+            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉")
     except: pass
 
 @bot.message_handler(func=lambda message: True)
@@ -157,7 +119,6 @@ def chat(message):
         if u_id in data.get("topics", {}):
             t_id = data["topics"][u_id]
             
-            # ადმინთან
             if t_id:
                 try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
                 except: pass
@@ -175,7 +136,6 @@ def chat(message):
     except: pass
 
 if __name__ == '__main__':
-    # გაშვებისას ვწმენდთ ძველ კავშირებს
     bot.delete_webhook(drop_pending_updates=True)
     while True:
         try:
