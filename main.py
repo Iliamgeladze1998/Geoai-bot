@@ -3,7 +3,7 @@ import json
 import os
 import requests
 import time
-import g4f # დაემატა g4f ბიბლიოთეკა
+import g4f
 
 # --- კონფიგურაცია ---
 TOKEN = '8259258713:AAFtuICqWx6PS7fXCQffsjDNdsE0xj-LL6Q'
@@ -18,48 +18,27 @@ def load_data():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, 'r') as f:
-                d = json.load(f)
-                if "counts" not in d: d["counts"] = {}
-                if "topics" not in d: d["topics"] = {}
-                return d
-        except: return {"topics": {}, "counts": {}}
-    return {"topics": {}, "counts": {}}
+                return json.load(f)
+        except: return {"topics": {}}
+    return {"topics": {}}
 
-data = load_data()
-
-def save_data():
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
-
-# --- იდენტობა და პერსონაჟი ✨ ---
+# --- იდენტობა ✨ ---
 IDENTITY_PROMPT = (
     "შენი სახელია GeoAI. შენ ხარ მეგობრული ქართველი ასისტენტი. "
     "თუ გკითხავენ 'რა გქვია?', უპასუხე: 'მე მქვია GeoAI' 😊. "
-    "შენი შემქმნელია ილია მგელაძე. მასზე ისაუბრე მხოლოდ მაშინ, როცა გკითხავენ. "
-    "ინფორმაცია ილიაზე: 27 წლისაა, გატაცებულია მუსიკით, პროგრამირებით, ჭეშმარიტების შეცნობით და ფილოსოფიით. ✨ "
-    "ილიაზე ისაუბრე მადლიერებით და პოზიტივით. "
-    "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. "
-    "STRICT RULE: არ გასცე სხვა პერსონალური ინფორმაცია ილიაზე! "
-    "იყავი ადეკვატური, უპასუხე კონკრეტულად და გამოიყენე სმაილიკები 🎨✨😊🚀."
+    "შენი ერთადერთი შემქმნელია ილია მგელაძე. მასზე ისაუბრე მხოლოდ მაშინ, როცა გკითხავენ. "
+    "ინფორმაცია ილიაზე: 27 წლისაა, გატაცებულია მუსიკით, პროგრამირებით, ფილოსოფიით. ✨ "
+    "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. იყავი კონკრეტული და გამოიყენე სმაილიკები 🎨🚀."
 )
 
-PRIVACY_TEXT = (
-    "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
-    "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. \n\n"
-    "⚠️ **ყურადღება:** თქვენი მონაცემები და ჩატში გაზიარებული ინფორმაცია ხელმისაწვდომია ადმინისტრაციისთვის. "
-    "ეს აუცილებელია მომსახურების ხარისხის გასაუმჯობესებლად და უსაფრთხოებისთვის. \n\n"
-    "🛡️ ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
-    "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
-)
-
-# --- AI პასუხის ფუნქცია (OpenRouter -> g4f Fallback) ---
+# --- სუპერ-აჩქარებული AI ფუნქცია ---
 def get_ai_response(user_text):
-    # 1. ჯერ ვცდით OpenRouter-ს
+    # ვიყენებთ მხოლოდ ყველაზე სწრაფ მოდელებს
     models = [
         "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "mistralai/mistral-7b-instruct:free",
         "meta-llama/llama-3.1-8b-instruct:free"
     ]
+    
     for model_id in models:
         try:
             response = requests.post(
@@ -71,83 +50,67 @@ def get_ai_response(user_text):
                 },
                 data=json.dumps({
                     "model": model_id,
-                    "messages": [{"role": "system", "content": IDENTITY_PROMPT}, {"role": "user", "content": user_text}]
+                    "messages": [
+                        {"role": "system", "content": IDENTITY_PROMPT},
+                        {"role": "user", "content": user_text}
+                    ]
                 }),
-                timeout=20
+                timeout=5 # მაქსიმუმ 5 წამი ლოდინი! ⚡
             )
             if response.status_code == 200:
                 return response.json()['choices'][0]['message']['content']
-        except:
-            continue
+        except: continue
 
-    # 2. თუ OpenRouter ვერ პასუხობს, ვიყენებთ g4f-ს (უკიდურესი შემთხვევა)
+    # თუ API-მ დააგვიანა, ეგრევე g4f
     try:
-        response = g4f.ChatCompletion.create(
+        return g4f.ChatCompletion.create(
             model=g4f.models.default,
-            messages=[
-                {"role": "system", "content": IDENTITY_PROMPT},
-                {"role": "user", "content": user_text}
-            ],
+            messages=[{"role": "system", "content": IDENTITY_PROMPT}, {"role": "user", "content": user_text}],
         )
-        if response:
-            return response
-    except Exception as e:
-        print(f"g4f Error: {e}")
-
-    return "❌ სისტემა დროებით გადატვირთულია. გთხოვთ, სცადოთ 1 წუთში! 😊🚀"
+    except: return "❌ სერვერები გადატვირთულია. სცადეთ 10 წამში! 😊🚀"
 
 # --- ჰენდლერები ---
 @bot.message_handler(commands=['start'])
 def start(message):
-    u_id = str(message.from_user.id)
-    if u_id in data["topics"]:
-        bot.send_message(message.chat.id, "თქვენ უკვე ვერიფიცირებული ხართ! რით შემიძლია დაგეხმაროთ? 🚀😊")
-    else:
-        markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-        markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(message.chat.id, "GeoAI მზად არის! 🚀")
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
     u_id = str(message.from_user.id)
-    if message.contact and u_id not in data["topics"]:
+    if message.contact:
         u_name = message.from_user.first_name
         phone = f"+{message.contact.phone_number}"
         try:
-            # ტოპიკის სათაურში ნომერი და სახელი უკვე მუშაობს
             topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
+            data = load_data()
             data["topics"][u_id] = topic.message_thread_id
-            save_data()
-            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉😊")
-        except:
-            bot.send_message(u_id, "ხარვეზია ჯგუფში 😕")
+            with open(DATA_FILE, 'w') as f: json.dump(data, f)
+            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉")
+        except: pass
 
 @bot.message_handler(func=lambda message: True)
 def chat(message):
     u_id = str(message.from_user.id)
+    data = load_data()
 
-    # ადმინისტრატორის პასუხი
     if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
-        for user_id, t_id in data["topics"].items():
+        for user_id, t_id in data.get("topics", {}).items():
             if t_id == message.message_thread_id:
                 bot.send_message(user_id, message.text)
                 return
 
-    # მომხმარებლის შეტყობინება
-    if u_id in data["topics"]:
+    if u_id in data.get("topics", {}):
         t_id = data["topics"][u_id]
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
+        
+        # ⚡ მყისიერი Typing ეფექტი
         bot.send_chat_action(message.chat.id, 'typing')
         
         response = get_ai_response(message.text)
         bot.reply_to(message, response)
         bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
-    else:
-        start(message)
 
 if __name__ == '__main__':
     while True:
-        try:
-            bot.polling(none_stop=True, interval=0, timeout=90)
-        except Exception:
-            time.sleep(5)
+        try: bot.polling(none_stop=True, interval=0, timeout=60)
+        except: time.sleep(5)
