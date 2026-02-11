@@ -1,142 +1,148 @@
 import telebot
+import g4f
 import json
 import os
 import time
-import g4f
 
-# --- შენი ახალი ტოკენი ---
+# --- მონაცემები (აქ ჩავსვი ახალი ტოკენი!) ---
 TOKEN = '8259258713:AAGIzuvaxrzqjaQYTbetApYWKw_jkWUdz_M'
 ADMIN_GROUP_ID = -1003543241594 
 DATA_FILE = 'bot_data.json'
 
-bot = telebot.TeleBot(TOKEN, threaded=False)
+bot = telebot.TeleBot(TOKEN, threaded=True)
 
-# --- იდენტობა ---
-IDENTITY_PROMPT = (
-    "შენი სახელია GeoAI. შენ ხარ მეგობრული ქართველი ასისტენტი. "
-    "თუ გკითხავენ 'რა გქვია?', უპასუხე: 'მე მქვია GeoAI' 😊. "
-    "შენი შემქმნელია ილია მგელაძე (27 წლის, მუსიკოსი, ფილოსოფოსი). "
-    "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. "
-)
-
-PRIVACY_TEXT = (
-    "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
-    "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია.\n\n"
-    "⚠️ **გაფრთხილება:** თქვენი ტელეფონის ნომერი და ბოტთან ნებისმიერი მიმოწერა **ხელმისაწვდომია ადმინისტრაციისთვის**.\n\n"
-    "✅ **ღილაკზე „ვერიფიკაცია“ დაჭერით თქვენ ადასტურებთ, რომ ეთანხმებით ამ პირობებს.**"
-)
-
-# --- მონაცემები ---
 def load_data():
-    if not os.path.exists(DATA_FILE): return {"topics": {}}
-    try:
-        with open(DATA_FILE, 'r') as f: return json.load(f)
-    except: return {"topics": {}} 
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r') as f:
+                d = json.load(f)
+                if "counts" not in d: d["counts"] = {}
+                return d
+        except: return {"topics": {}, "phones": {}, "counts": {}}
+    return {"topics": {}, "phones": {}, "counts": {}}
 
-def save_data(data):
+data = load_data()
+
+def save_data():
     try:
         with open(DATA_FILE, 'w') as f: json.dump(data, f, indent=4)
     except: pass
 
-# --- AI ფუნქცია (დაცული) ---
-def get_ai_response(user_text):
-    try:
-        # ვცდილობთ GPT-3.5-ს (უფრო სწრაფია და ნაკლებად იჭედება g4f-ზე)
-        response = g4f.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": IDENTITY_PROMPT},
-                {"role": "user", "content": user_text}
-            ],
-        )
-        if response:
-            return response
-    except Exception as e:
-        print(f"G4F Error: {e}")
-    
-    return "❌ კავშირის ხარვეზი. გთხოვთ, მოგვწეროთ თავიდან."
+# 🆔 რკინისებური იდენტობა და პოზიტივი ✨
+IDENTITY_PROMPT = (
+    "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე. "
+    "მისი საკონტაქტო მეილია: mgeladzeilia39@gmail.com. "
+    "MANDATORY: თუ გკითხავენ შემქმნელზე ან მეილზე, დაუყოვნებლივ მიეცი მეილი. "
+    "ისაუბრე ილიაზე უდიდესი მადლიერებით და პოზიტივით. "
+    "MANDATORY: გამოიყენე Mirror Language Effect (ენის სარკე). "
+    "MANDATORY: გამოიყენე ბევრი სმაილიკები ყოველ პასუხში 🎨✨😊🚀."
+)
 
-# --- ჰენდლერები ---
+PRIVACY_TEXT = (
+    "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
+    "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. "
+    "🛡️ ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
+    "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
+)
+
+def send_stars_invoice(chat_id):
+    try:
+        prices = [telebot.types.LabeledPrice(label="GeoAI Support 🌟", amount=50)]
+        bot.send_invoice(
+            chat_id, "მხარდაჭერა 🌟", "მადლობა, რომ ეხმარებით GeoAI-ს განვითარებაში!", 
+            "support_payload", "", "XTR", prices
+        )
+    except: pass
+
 @bot.message_handler(commands=['start'])
 def start(message):
-    try:
-        bot.delete_webhook(drop_pending_updates=True)
-        u_id = str(message.from_user.id)
-        data = load_data()
-        
-        if u_id in data.get("topics", {}):
-            bot.send_message(message.chat.id, "GeoAI მზად არის! 🚀")
-        else:
-            markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-            markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-            bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
-    except: pass
+    u_id = str(message.from_user.id)
+    if u_id in data["topics"]:
+        bot.send_message(message.chat.id, "თქვენ უკვე ვერიფიცირებული ხართ! რით შემიძლია დაგეხმაროთ? 🚀😊")
+    else:
+        markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+        markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
+        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
+
+@bot.message_handler(commands=['donate'])
+def donate(message):
+    send_stars_invoice(message.chat.id)
+
+@bot.pre_checkout_query_handler(func=lambda query: True)
+def checkout(pre_checkout_query):
+    bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+
+@bot.message_handler(content_types=['successful_payment'])
+def got_payment(message):
+    bot.send_message(message.chat.id, "მადლობა მხარდაჭერისთვის! 💖✨")
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
-    try:
-        u_id = str(message.from_user.id)
-        if message.contact:
-            u_name = message.from_user.first_name
-            phone = f"+{message.contact.phone_number}"
-            
-            t_id = None
-            try:
-                topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
-                t_id = topic.message_thread_id
-            except: pass
-
-            data = load_data()
-            if "topics" not in data: data["topics"] = {}
-            data["topics"][u_id] = t_id
-            save_data(data)
-            
-            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉")
-    except: pass
+    u_id = str(message.from_user.id)
+    if message.contact and u_id not in data["topics"]:
+        u_name = message.from_user.first_name
+        phone = f"+{message.contact.phone_number}"
+        try:
+            topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
+            data["topics"][u_id] = topic.message_thread_id
+            data["counts"][u_id] = 0
+            save_data()
+            bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉😊")
+            send_stars_invoice(u_id)
+        except:
+            bot.send_message(u_id, "ხარვეზია ჯგუფში 😕")
 
 @bot.message_handler(func=lambda message: True)
 def chat(message):
-    try:
-        u_id = str(message.from_user.id)
-        data = load_data()
-        
-        # ადმინი -> იუზერი
-        if message.chat.id == ADMIN_GROUP_ID:
-            if message.reply_to_message:
-                topic_id = message.reply_to_message.message_thread_id
-                for uid, tid in data.get("topics", {}).items():
-                    if tid == topic_id:
-                        bot.send_message(uid, message.text)
-                        return
-            return
+    u_id = str(message.from_user.id)
 
-        # იუზერი -> ბოტი
-        if u_id in data.get("topics", {}):
-            t_id = data["topics"][u_id]
-            
-            # 1. ჯერ ვაგზავნით ადმინთან (რომ არ დაიკარგოს!)
-            if t_id:
-                try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
-                except: pass
-            
+    # ადმინის პასუხი
+    if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
+        for user_id, t_id in data["topics"].items():
+            if t_id == message.message_thread_id:
+                bot.send_message(user_id, message.text)
+                return
+
+    # იუზერის ჩატი
+    if u_id in data["topics"]:
+        t_id = data["topics"][u_id]
+        
+        # 1. ჯერ ვაგზავნით ადმინთან
+        try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
+        except: pass
+        
+        data["counts"][u_id] = data["counts"].get(u_id, 0) + 1
+        save_data()
+        if data["counts"][u_id] % 40 == 0:
+            send_stars_invoice(u_id)
+
+        try:
             bot.send_chat_action(message.chat.id, 'typing')
+            full_prompt = f"{IDENTITY_PROMPT}\n\nUser: {message.text}"
             
-            # 2. მერე ველოდებით პასუხს
-            response = get_ai_response(message.text)
+            # g4f - ძველი მეთოდი
+            response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
+            
+            # 🛑 ფილტრი: ჩინური სიმბოლოების ან ლინკების აღმოჩენა
+            if any(u'\u4e00' <= c <= u'\u9fff' for c in response) or "http" in response.lower():
+                bot.reply_to(message, "უკაცრავად, სერვერი დროებით დაიტვირთა ⏳. გთხოვთ, გამიმეოროთ კითხვა 1 წუთში! 😊🚀")
+                return
+
             bot.reply_to(message, response)
             
-            # 3. ბოლოს პასუხსაც ვაგზავნით ადმინთან
-            if t_id:
-                try: bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
-                except: pass
-        else:
-            start(message)
-    except: pass
+            # პასუხის გაგზავნა ადმინთან
+            try: bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
+            except: pass
+            
+        except Exception as e:
+            print(f"Error: {e}")
+            bot.reply_to(message, "სისტემა გადაიტვირთა, სცადეთ 1 წუთში ⏳😊")
+    else:
+        start(message)
 
 if __name__ == '__main__':
-    bot.delete_webhook(drop_pending_updates=True)
-    while True:
-        try:
-            bot.polling(none_stop=True, interval=2, timeout=60)
-        except:
-            time.sleep(5)
+    # ეს დავამატე მხოლოდ იმისთვის, რომ 409 კონფლიქტი არ მოხდეს გაშვებისას
+    try: bot.delete_webhook(drop_pending_updates=True)
+    except: pass
+    
+    bot.polling(none_stop=True)
