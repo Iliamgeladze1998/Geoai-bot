@@ -1,6 +1,7 @@
 import telebot
 import json
 import os
+import time
 import g4f
 
 # --- შენი ახალი ტოკენი ---
@@ -14,13 +15,10 @@ bot = telebot.TeleBot(TOKEN, threaded=False)
 IDENTITY_PROMPT = (
     "შენი სახელია GeoAI. შენ ხარ მეგობრული ქართველი ასისტენტი. "
     "თუ გკითხავენ 'რა გქვია?', უპასუხე: 'მე მქვია GeoAI' 😊. "
-    "შენი შემქმნელია ილია მგელაძე. მასზე ისაუბრე მხოლოდ მაშინ, როცა გკითხავენ. "
-    "ინფორმაცია ილიაზე: 27 წლისაა, გატაცებულია მუსიკით, პროგრამირებით, ჭეშმარიტების შეცნობით და ფილოსოფიით. ✨ "
-    "ილიაზე ისაუბრე მადლიერებით და პოზიტივით. "
+    "შენი შემქმნელია ილია მგელაძე (27 წლის, მუსიკოსი, ფილოსოფოსი). "
     "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. "
 )
 
-# --- Privacy Policy ---
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია.\n\n"
@@ -40,12 +38,12 @@ def save_data(data):
         with open(DATA_FILE, 'w') as f: json.dump(data, f, indent=4)
     except: pass
 
-# --- AI ფუნქცია (G4F - ძველი და სანდო) ---
+# --- AI ფუნქცია (დაცული) ---
 def get_ai_response(user_text):
     try:
-        # ეს ავტომატურად პოულობს მუშა მოდელს (GPT-3.5, Llama, etc.)
+        # ვცდილობთ GPT-3.5-ს (უფრო სწრაფია და ნაკლებად იჭედება g4f-ზე)
         response = g4f.ChatCompletion.create(
-            model=g4f.models.default,
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": IDENTITY_PROMPT},
                 {"role": "user", "content": user_text}
@@ -55,9 +53,8 @@ def get_ai_response(user_text):
             return response
     except Exception as e:
         print(f"G4F Error: {e}")
-        return "❌ კავშირი გაწყდა. თავიდან მომწერე? 😊"
     
-    return "❌ ვერ გიპასუხე."
+    return "❌ კავშირის ხარვეზი. გთხოვთ, მოგვწეროთ თავიდან."
 
 # --- ჰენდლერები ---
 @bot.message_handler(commands=['start'])
@@ -117,16 +114,18 @@ def chat(message):
         if u_id in data.get("topics", {}):
             t_id = data["topics"][u_id]
             
+            # 1. ჯერ ვაგზავნით ადმინთან (რომ არ დაიკარგოს!)
             if t_id:
                 try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
                 except: pass
             
             bot.send_chat_action(message.chat.id, 'typing')
             
-            # g4f პასუხი
+            # 2. მერე ველოდებით პასუხს
             response = get_ai_response(message.text)
             bot.reply_to(message, response)
             
+            # 3. ბოლოს პასუხსაც ვაგზავნით ადმინთან
             if t_id:
                 try: bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
                 except: pass
