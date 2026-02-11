@@ -3,7 +3,6 @@ import json
 import os
 import requests
 import time
-import g4f
 
 # --- კონფიგურაცია ---
 TOKEN = '8259258713:AAFtuICqWx6PS7fXCQffsjDNdsE0xj-LL6Q'
@@ -12,6 +11,15 @@ ADMIN_GROUP_ID = -1003543241594
 DATA_FILE = 'bot_data.json'
 
 bot = telebot.TeleBot(TOKEN, threaded=True)
+
+# --- იდენტობა ✨ ---
+IDENTITY_PROMPT = (
+    "შენი სახელია GeoAI. შენ ხარ მეგობრული ქართველი ასისტენტი. "
+    "თუ გკითხავენ 'რა გქვია?', უპასუხე: 'მე მქვია GeoAI' 😊. "
+    "შენი ერთადერთი შემქმნელია ილია მგელაძე (27 წლის, მუსიკოსი, ფილოსოფოსი). "
+    "მასზე ისაუბრე მხოლოდ მაშინ, როცა გკითხავენ. "
+    "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. გამოიყენე სმაილიკები 🎨🚀."
+)
 
 # --- მონაცემების მართვა ---
 def load_data():
@@ -22,21 +30,13 @@ def load_data():
         except: return {"topics": {}}
     return {"topics": {}}
 
-# --- იდენტობა ✨ ---
-IDENTITY_PROMPT = (
-    "შენი სახელია GeoAI. შენ ხარ მეგობრული ქართველი ასისტენტი. "
-    "თუ გკითხავენ 'რა გქვია?', უპასუხე: 'მე მქვია GeoAI' 😊. "
-    "შენი ერთადერთი შემქმნელია ილია მგელაძე. მასზე ისაუბრე მხოლოდ მაშინ, როცა გკითხავენ. "
-    "ინფორმაცია ილიაზე: 27 წლისაა, გატაცებულია მუსიკით, პროგრამირებით, ფილოსოფიით. ✨ "
-    "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. იყავი კონკრეტული და გამოიყენე სმაილიკები 🎨🚀."
-)
-
-# --- სუპერ-აჩქარებული AI ფუნქცია ---
+# --- AI ფუნქცია (მხოლოდ API, g4f-ის გარეშე) ---
 def get_ai_response(user_text):
-    # ვიყენებთ მხოლოდ ყველაზე სწრაფ მოდელებს
+    # სიაშია 3 ყველაზე სანდო უფასო მოდელი
     models = [
-        "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "meta-llama/llama-3.1-8b-instruct:free"
+        "google/gemini-2.0-flash-lite-preview-02-05:free", # უსწრაფესი
+        "meta-llama/llama-3.1-8b-instruct:free",           # სტაბილური
+        "mistralai/mistral-7b-instruct:free"               # სათადარიგო
     ]
     
     for model_id in models:
@@ -46,7 +46,8 @@ def get_ai_response(user_text):
                 headers={
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://koyeb.com"
+                    "HTTP-Referer": "https://koyeb.com",
+                    "X-Title": "GeoAI"
                 },
                 data=json.dumps({
                     "model": model_id,
@@ -55,19 +56,22 @@ def get_ai_response(user_text):
                         {"role": "user", "content": user_text}
                     ]
                 }),
-                timeout=5 # მაქსიმუმ 5 წამი ლოდინი! ⚡
+                timeout=10 # 10 წამი ვაცადოთ, რომ არ გაითიშოს
             )
+            
             if response.status_code == 200:
-                return response.json()['choices'][0]['message']['content']
-        except: continue
+                data = response.json()
+                if 'choices' in data and data['choices']:
+                    return data['choices'][0]['message']['content']
+            
+            # თუ მოდელი დაკავებულია, ვაგრძელებთ შემდეგზე
+            time.sleep(1)
+            
+        except Exception as e:
+            print(f"Error with {model_id}: {e}")
+            continue
 
-    # თუ API-მ დააგვიანა, ეგრევე g4f
-    try:
-        return g4f.ChatCompletion.create(
-            model=g4f.models.default,
-            messages=[{"role": "system", "content": IDENTITY_PROMPT}, {"role": "user", "content": user_text}],
-        )
-    except: return "❌ სერვერები გადატვირთულია. სცადეთ 10 წამში! 😊🚀"
+    return "❌ სერვერები გადატვირთულია. სცადეთ 10 წამში! 😊🚀"
 
 # --- ჰენდლერები ---
 @bot.message_handler(commands=['start'])
@@ -93,18 +97,19 @@ def chat(message):
     u_id = str(message.from_user.id)
     data = load_data()
 
+    # ადმინის პასუხი
     if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
         for user_id, t_id in data.get("topics", {}).items():
             if t_id == message.message_thread_id:
                 bot.send_message(user_id, message.text)
                 return
 
+    # იუზერის ჩატი
     if u_id in data.get("topics", {}):
         t_id = data["topics"][u_id]
         bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
         
-        # ⚡ მყისიერი Typing ეფექტი
-        bot.send_chat_action(message.chat.id, 'typing')
+        bot.send_chat_action(message.chat.id, 'typing') # რომ გამოჩნდეს რომ წერს
         
         response = get_ai_response(message.text)
         bot.reply_to(message, response)
@@ -112,5 +117,7 @@ def chat(message):
 
 if __name__ == '__main__':
     while True:
-        try: bot.polling(none_stop=True, interval=0, timeout=60)
-        except: time.sleep(5)
+        try:
+            bot.polling(none_stop=True, interval=0, timeout=60)
+        except:
+            time.sleep(5)
