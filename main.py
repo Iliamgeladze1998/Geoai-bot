@@ -37,7 +37,7 @@ IDENTITY_PROMPT = (
     "MANDATORY: გამოიყენე ბევრი სმაილიკები ყოველ პასუხში 🎨✨😊🚀."
 )
 
-# --- OpenRouter AI ფუნქცია (სრულიად უფასო მოდელით) ---
+# --- AI პასუხის ფუნქცია (ზუსტი უფასო მოდელით) ---
 def get_ai_response(user_text):
     try:
         response = requests.post(
@@ -47,8 +47,8 @@ def get_ai_response(user_text):
                 "Content-Type": "application/json",
             },
             data=json.dumps({
-                # 👇 ეს არის სრულიად უფასო მოდელი
-                "model": "google/gemini-2.0-flash-lite-preview-02-05:free", 
+                # 👇 ეს არის სწორი და უფასო მოდელის სახელი
+                "model": "google/gemini-2.0-flash-exp:free", 
                 "messages": [
                     {"role": "system", "content": IDENTITY_PROMPT},
                     {"role": "user", "content": user_text}
@@ -61,7 +61,7 @@ def get_ai_response(user_text):
         if response.status_code == 200:
             return res_json['choices'][0]['message']['content']
         else:
-            # თუ ისევ ერორია, აქ გამოჩნდება
+            # აქედან ვიგებთ შეცდომებს
             error_info = res_json.get('error', {}).get('message', 'Unknown Error')
             return f"❌ AI Error: {error_info} (Code: {response.status_code}) 😊🚀"
             
