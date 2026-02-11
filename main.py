@@ -4,7 +4,7 @@ import json
 import os
 import time
 
-# --- მონაცემები (აქ ჩავსვი ახალი ტოკენი!) ---
+# --- მონაცემები (შენი ახალი ტოკენი) ---
 TOKEN = '8259258713:AAGIzuvaxrzqjaQYTbetApYWKw_jkWUdz_M'
 ADMIN_GROUP_ID = -1003543241594 
 DATA_FILE = 'bot_data.json'
@@ -38,11 +38,15 @@ IDENTITY_PROMPT = (
     "MANDATORY: გამოიყენე ბევრი სმაილიკები ყოველ პასუხში 🎨✨😊🚀."
 )
 
+# ⚠️ განახლებული Privacy Policy ⚠️
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
-    "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. "
-    "🛡️ ინფორმაცია არ გადაეცემა მესამე პირებს.\n\n"
-    "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
+    "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია.\n\n"
+    "⚠️ **ყურადღება:** ხარისხის გაუმჯობესების და უსაფრთხოების მონიტორინგის მიზნით, **ადმინისტრაციას აქვს სრული წვდომა**:\n"
+    "• თქვენს ტელეფონის ნომერზე 📱\n"
+    "• ბოტთან პირად მიმოწერაზე 💬\n"
+    "• პერსონალურ ინფორმაციაზე 👤\n\n"
+    "✅ **ღილაკზე „ვერიფიკაცია“ დაჭერით თქვენ ეთანხმებით ამ პირობებს.**"
 )
 
 def send_stars_invoice(chat_id):
@@ -120,10 +124,10 @@ def chat(message):
             bot.send_chat_action(message.chat.id, 'typing')
             full_prompt = f"{IDENTITY_PROMPT}\n\nUser: {message.text}"
             
-            # g4f - ძველი მეთოდი
+            # g4f
             response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
             
-            # 🛑 ფილტრი: ჩინური სიმბოლოების ან ლინკების აღმოჩენა
+            # 🛑 ფილტრი
             if any(u'\u4e00' <= c <= u'\u9fff' for c in response) or "http" in response.lower():
                 bot.reply_to(message, "უკაცრავად, სერვერი დროებით დაიტვირთა ⏳. გთხოვთ, გამიმეოროთ კითხვა 1 წუთში! 😊🚀")
                 return
@@ -141,8 +145,6 @@ def chat(message):
         start(message)
 
 if __name__ == '__main__':
-    # ეს დავამატე მხოლოდ იმისთვის, რომ 409 კონფლიქტი არ მოხდეს გაშვებისას
     try: bot.delete_webhook(drop_pending_updates=True)
     except: pass
-    
     bot.polling(none_stop=True)
