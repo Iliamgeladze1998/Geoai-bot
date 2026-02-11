@@ -28,25 +28,19 @@ def save_data():
         with open(DATA_FILE, 'w') as f: json.dump(data, f, indent=4)
     except: pass
 
-# 🆔 შენი პორტრეტი (მუსიკოსი, 27 წლის, თბილისი) 🎸✨
-# აქ ჩავამატე მხოლოდ ტექსტი, კოდი იგივეა!
+# 🆔 განახლებული ინტელექტი - მეილი პრიორიტეტშია! 📧✨
 IDENTITY_PROMPT = (
-    "შენი სახელია GeoAI. შენი შემქმნელია ილია მგელაძე. "
-    "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. "
+    "შენი შემქმნელის (ილია მგელაძე) საკონტაქტო მეილია: mgeladzeilia39@gmail.com. "
+    "MANDATORY: თუ ვინმე გკითხავს კონტაქტს, შემქმნელს ან მეილს, აუცილებლად მიაწოდე ეს მეილი: mgeladzeilia39@gmail.com. "
     
-    "თუ გკითხავენ ილიაზე, უპასუხე კონტექსტიდან გამომდინარე (არ ჩამოთვალო ყველაფერი ერთად შაბლონურად). "
-    "ინფორმაცია ილიაზე: "
-    "1. არის 27 წლის, ცხოვრობს თბილისში. "
-    "2. პროფესია: მუსიკოსი, მულტიინსტრუმენტალისტი (უკრავს ბევრ საკრავზე), ძალიან ნიჭიერი ხელოვანი. "
-    "3. ინტერესები: პროგრამირება და ტექნოლოგიური პროგრესი, ფილოსოფია, ფსიქოლოგია, სამყაროს არსის შეცნობა და ჭეშმარიტების ძიება. "
+    "შენი სახელია GeoAI. "
+    "ინფორმაცია შემქმნელზე (გაეცი მხოლოდ კითხვის შესაბამისად): "
+    "ილია არის 27 წლის, ცხოვრობს თბილისში. ის არის ნიჭიერი მუსიკოსი და მულტიინსტრუმენტალისტი. "
+    "აინტერესებს პროგრამირება, ტექნოლოგიები, ფილოსოფია, ფსიქოლოგია და ჭეშმარიტების ძიება. "
     
-    "STRICT RULE: ილიაზე ისაუბრე მხოლოდ პოზიტივით და პატივისცემით. "
-    "STRICT RULE: ზემოთ ჩამოთვლილის გარდა, არ გასცე სხვა პირადი ინფორმაცია! "
-    "MANDATORY: გამოიყენე ბევრი სმაილიკები 🎨✨😊🚀."
+    "ისაუბრე ილიაზე მადლიერებით. გამოიყენე სმაილიკები ყოველ პასუხში 🎨✨😊🚀."
 )
 
-# ⚠️ Privacy Policy (ადმინისტრაციის წვდომით)
-# აქაც მხოლოდ ტექსტი შეიცვალა!
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია.\n\n"
@@ -107,18 +101,15 @@ def get_contact(message):
 def chat(message):
     u_id = str(message.from_user.id)
 
-    # ადმინის პასუხი
     if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
         for user_id, t_id in data["topics"].items():
             if t_id == message.message_thread_id:
                 bot.send_message(user_id, message.text)
                 return
 
-    # იუზერის ჩატი
     if u_id in data["topics"]:
         t_id = data["topics"][u_id]
         
-        # 1. ჯერ ვაგზავნით ადმინთან
         try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
         except: pass
         
@@ -131,17 +122,14 @@ def chat(message):
             bot.send_chat_action(message.chat.id, 'typing')
             full_prompt = f"{IDENTITY_PROMPT}\n\nUser: {message.text}"
             
-            # g4f (რკინის კოდი)
             response = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": full_prompt}])
             
-            # 🛑 ფილტრი
             if any(u'\u4e00' <= c <= u'\u9fff' for c in response) or "http" in response.lower():
                 bot.reply_to(message, "უკაცრავად, სერვერი დროებით დაიტვირთა ⏳. გთხოვთ, გამიმეოროთ კითხვა 1 წუთში! 😊🚀")
                 return
 
             bot.reply_to(message, response)
             
-            # პასუხის გაგზავნა ადმინთან
             try: bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
             except: pass
             
