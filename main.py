@@ -3,6 +3,10 @@ import json
 import os
 import requests
 import time
+import urllib3
+
+# SSL გაფრთხილებების გათიშვა (დიაგნოსტიკისთვის)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- კონფიგურაცია ---
 TOKEN = '8259258713:AAFtuICqWx6PS7fXCQffsjDNdsE0xj-LL6Q'
@@ -12,58 +16,38 @@ DATA_FILE = 'bot_data.json'
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
-# --- გლობალური მეხსიერება (RAM) ---
-MEMORY_TOPICS = {} 
-
 # --- იდენტობა ---
 IDENTITY_PROMPT = (
-    "შენი სახელია GeoAI. შენ ხარ მეგობრული ქართველი ასისტენტი. "
+    "შენი სახელია GeoAI. "
     "თუ გკითხავენ 'რა გქვია?', უპასუხე: 'მე მქვია GeoAI' 😊. "
-    "შენი შემქმნელია ილია მგელაძე (27 წლის, მუსიკოსი, ფილოსოფოსი). "
-    "მასზე ისაუბრე მხოლოდ მაშინ, როცა გკითხავენ. "
-    "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. "
-)
-
-PRIVACY_TEXT = (
-    "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
-    "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. \n\n"
-    "⚠️ **ყურადღება:** თქვენი მონაცემები და ჩატში გაზიარებული ინფორმაცია ხელმისაწვდომია ადმინისტრაციისთვის. "
-    "ეს აუცილებელია უსაფრთხოებისთვის. \n\n"
-    "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
+    "შენი შემქმნელია ილია მგელაძე."
 )
 
 # --- მონაცემების მართვა ---
 def load_data():
-    global MEMORY_TOPICS
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, 'r') as f:
-                data = json.load(f)
-                if "topics" in data:
-                    MEMORY_TOPICS.update(data["topics"])
-        except: pass
-    return MEMORY_TOPICS
+                return json.load(f)
+        except: return {"topics": {}}
+    return {"topics": {}}
 
-def save_data(user_id, topic_id):
-    global MEMORY_TOPICS
-    MEMORY_TOPICS[str(user_id)] = topic_id
+def save_data(data):
     try:
-        data = {"topics": MEMORY_TOPICS}
         with open(DATA_FILE, 'w') as f:
             json.dump(data, f, indent=4)
     except: pass
 
-# --- AI ფუნქცია (გაფართოებული სია) ---
+# --- AI ფუნქცია (DEBUG MODE 🐞) ---
 def get_ai_response(user_text, chat_id):
-    # სიაშია 5 სხვადასხვა კომპანიის მოდელი (Google, Meta, Mistral, Microsoft)
-    # რომელიმე უეჭველი იმუშავებს!
+    # ყველაზე სანდო მოდელები
     models = [
         "google/gemini-2.0-flash-lite-preview-02-05:free",
         "mistralai/mistral-7b-instruct:free",
-        "meta-llama/llama-3.1-8b-instruct:free",
-        "microsoft/phi-3-mini-128k-instruct:free",
-        "openchat/openchat-7:free"
+        "meta-llama/llama-3.1-8b-instruct:free"
     ]
+    
+    error_log = "" # აქ შევაგროვებთ ერორებს
     
     for model_id in models:
         try:
@@ -82,7 +66,8 @@ def get_ai_response(user_text, chat_id):
                         {"role": "user", "content": user_text}
                     ]
                 }),
-                timeout=15 # 15 წამი ვაცადოთ, რომ მოასწროს
+                timeout=10,
+                verify=False # SSL შემოწმებას ვთიშავთ!
             )
             
             if response.status_code == 200:
@@ -90,27 +75,30 @@ def get_ai_response(user_text, chat_id):
                 if 'choices' in data:
                     return data['choices'][0]['message']['content']
             else:
-                # ლოგში ვწერთ, რომელი ჩაიჭრა (მომხმარებელთან არ ვაგზავნით ერორს)
-                print(f"Failed {model_id}: {response.status_code}")
+                # ინახავს ერორის კოდს და ტექსტს
+                error_msg = f"\n⚠️ {model_id}: Status {response.status_code} - {response.text[:100]}"
+                error_log += error_msg
+                print(error_msg)
                 
         except Exception as e:
-            print(f"Error {model_id}: {e}")
+            error_log += f"\n❌ {model_id}: {str(e)}"
             continue
 
-    return "❌ ძალიან უცნაურია, მაგრამ ინტერნეტის პრობლემაა. სცადეთ თავიდან! 😊"
+    # თუ აქამდე მოვიდა, აბრუნებს სრულ რეპორტს ჩატში
+    return f"🆘 დიაგნოსტიკა:\n{error_log}\n\nგთხოვთ ეს სკრინშოტი აჩვენოთ დეველოპერს."
 
 # --- ჰენდლერები ---
 @bot.message_handler(commands=['start'])
 def start(message):
     u_id = str(message.from_user.id)
-    topics = load_data()
+    data = load_data()
     
-    if u_id in topics:
-        bot.send_message(message.chat.id, "GeoAI მზად არის! 🚀\nგისმენთ.")
+    if u_id in data.get("topics", {}):
+        bot.send_message(message.chat.id, "GeoAI მზად არის! 🚀")
     else:
         markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(message.chat.id, "გთხოვთ გაიაროთ ვერიფიკაცია:", reply_markup=markup)
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
@@ -126,36 +114,38 @@ def get_contact(message):
                 t_id = topic.message_thread_id
             except: pass
 
-            save_data(u_id, t_id)
+            data = load_data()
+            if "topics" not in data: data["topics"] = {}
+            data["topics"][u_id] = t_id
+            save_data(data)
             
             bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉")
-            bot.send_message(u_id, "ახლა შეგიძლიათ მომწეროთ ნებისმიერი კითხვა! 🚀")
     except: pass
 
 @bot.message_handler(func=lambda message: True)
 def chat(message):
     u_id = str(message.from_user.id)
-    topics = load_data()
+    data = load_data()
 
+    # ადმინის პასუხი
     if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
-        for user_id, t_id in topics.items():
+        for user_id, t_id in data.get("topics", {}).items():
             if t_id == message.message_thread_id:
                 bot.send_message(user_id, message.text)
                 return
 
-    if u_id in topics:
-        t_id = topics[u_id]
-        if t_id:
-            try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
-            except: pass
+    # იუზერის ჩატი
+    if u_id in data.get("topics", {}):
+        t_id = data["topics"][u_id]
         
         bot.send_chat_action(message.chat.id, 'typing')
+        # აქ ვიძახებთ დიაგნოსტიკურ ფუნქციას
         response = get_ai_response(message.text, message.chat.id)
         
         bot.reply_to(message, response)
         
         if t_id:
-            try: bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
+            try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}\n🤖 {response}", message_thread_id=t_id)
             except: pass
     else:
         start(message)
