@@ -10,7 +10,12 @@ OPENROUTER_API_KEY = 'sk-or-v1-95ebac55b5152d2af6754130a3de95caacab649acdc978702
 ADMIN_GROUP_ID = -1003543241594 
 DATA_FILE = 'bot_data.json'
 
+# ყურადღება: threaded=False სტაბილურობისთვის
 bot = telebot.TeleBot(TOKEN, threaded=False)
+
+# --- გლობალური მეხსიერება (RAM) ---
+# ეს დააზღვევს ფაილის სისტემას. თუ ფაილი ვერ ჩაიწერა, აქ მაინც შეინახება.
+MEMORY_TOPICS = {} 
 
 # --- იდენტობა ---
 IDENTITY_PROMPT = (
@@ -20,38 +25,47 @@ IDENTITY_PROMPT = (
     "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. "
 )
 
-# --- Privacy Policy (დაბრუნდა!) ---
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. \n\n"
     "⚠️ **ყურადღება:** თქვენი მონაცემები და ჩატში გაზიარებული ინფორმაცია ხელმისაწვდომია ადმინისტრაციისთვის. "
-    "ეს აუცილებელია მომსახურების ხარისხის და უსაფრთხოებისთვის. \n\n"
+    "ეს აუცილებელია უსაფრთხოებისთვის. \n\n"
     "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
 )
 
-# --- მონაცემების მართვა ---
+# --- მონაცემების მართვა (Dual System) ---
 def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {"topics": {}}
-    try:
-        with open(DATA_FILE, 'r') as f:
-            return json.load(f)
-    except: return {"topics": {}} 
+    global MEMORY_TOPICS
+    # ჯერ ვტვირთავთ ფაილიდან
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r') as f:
+                data = json.load(f)
+                # ვაახლებთ RAM-ს ფაილის მონაცემებით
+                if "topics" in data:
+                    MEMORY_TOPICS.update(data["topics"])
+        except: pass
+    return MEMORY_TOPICS
 
-def save_data(data, chat_id=None):
+def save_data(user_id, topic_id):
+    global MEMORY_TOPICS
+    # 1. ვინახავთ RAM-ში (მყისიერად)
+    MEMORY_TOPICS[str(user_id)] = topic_id
+    
+    # 2. ვცდილობთ ჩაწერას ფაილში (საიმედოობისთვის)
     try:
+        data = {"topics": MEMORY_TOPICS}
         with open(DATA_FILE, 'w') as f:
             json.dump(data, f, indent=4)
-    except: pass
+    except Exception as e:
+        print(f"File Save Error: {e}")
 
-# --- AI ფუნქცია (ახალი, მუშა მოდელებით) ---
+# --- AI ფუნქცია (განახლებული მოდელებით) ---
 def get_ai_response(user_text, chat_id):
-    # განახლებული სია: ეს მოდელები ყველაზე სტაბილურია უფასოდ
+    # მხოლოდ ეს ორი მოდელი! სხვები 404-ს აგდებენ.
     models = [
-        "google/gemini-2.0-flash-lite-preview-02-05:free", # ვცადოთ ისევ
-        "mistralai/mistral-7b-instruct:free",              # ეს "უკვდავია"
-        "qwen/qwen-2.5-vl-72b-instruct:free",               # ახალი და ძლიერი
-        "microsoft/phi-3-mini-128k-instruct:free"          # სარეზერვო
+        "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "meta-llama/llama-3.1-8b-instruct:free"
     ]
     
     last_error = ""
@@ -73,7 +87,7 @@ def get_ai_response(user_text, chat_id):
                         {"role": "user", "content": user_text}
                     ]
                 }),
-                timeout=10
+                timeout=8
             )
             
             if response.status_code == 200:
@@ -81,35 +95,27 @@ def get_ai_response(user_text, chat_id):
                 if 'choices' in data:
                     return data['choices'][0]['message']['content']
             else:
-                last_error = f"{model_id} -> {response.status_code}"
-                print(f"Failed {model_id}: {response.status_code}")
-                time.sleep(1) # ცოტა დაცდა, რომ არ დაგვბლოკონ
+                print(f"Model {model_id} failed: {response.status_code}")
                 
         except Exception as e:
-            last_error = str(e)
+            print(f"Connection error: {e}")
             continue
 
-    # თუ აქამდე მოვიდა, ესე იგი ყველა მოდელმა უარი თქვა
-    bot.send_message(chat_id, f"⚠️ ყველა სერვერი დაკავებულია. ბოლო შეცდომა: {last_error}")
-    return "❌ გთხოვთ, სცადოთ 30 წამში."
+    # თუ ორივე მოდელმა უარი თქვა
+    return "❌ ბოდიში, სერვერები გადატვირთულია. სცადეთ 30 წამში! 😊"
 
 # --- ჰენდლერები ---
 @bot.message_handler(commands=['start'])
 def start(message):
-    try:
-        u_id = str(message.from_user.id)
-        data = load_data()
-        
-        if u_id in data["topics"]:
-            bot.send_message(message.chat.id, "GeoAI მზად არის! 🚀\nშეგიძლიათ მომწეროთ.")
-        else:
-            markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-            markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-            # აქ დაბრუნდა Privacy Text!
-            bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
-            
-    except Exception as e:
-        bot.send_message(message.chat.id, f"Error: {e}")
+    u_id = str(message.from_user.id)
+    topics = load_data() # ვამოწმებთ მეხსიერებას
+    
+    if u_id in topics:
+        bot.send_message(message.chat.id, "GeoAI მზად არის! 🚀\nგისმენთ.")
+    else:
+        markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+        markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
+        bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
@@ -119,51 +125,55 @@ def get_contact(message):
             u_name = message.from_user.first_name
             phone = f"+{message.contact.phone_number}"
             
+            # ვქმნით ტოპიკს (თუ არ გამოვიდა, მაინც ვაგრძელებთ)
+            t_id = None
             try:
                 topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
                 t_id = topic.message_thread_id
-            except: t_id = None
+            except: pass
 
-            data = load_data()
-            data["topics"][u_id] = t_id
-            save_data(data, message.chat.id)
+            # ვინახავთ ორმაგ მეხსიერებაში!
+            save_data(u_id, t_id)
             
             bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉")
-    except: pass
+            # ავტომატურად ვპასუხობთ, რომ იუზერმა არ იფიქროს გაჭედაო
+            bot.send_message(u_id, "ახლა შეგიძლიათ მომწეროთ ნებისმიერი კითხვა! 🚀")
+    except: 
+        bot.send_message(message.chat.id, "შეცდომა ვერიფიკაციისას. სცადეთ თავიდან.")
 
 @bot.message_handler(func=lambda message: True)
 def chat(message):
-    try:
-        u_id = str(message.from_user.id)
-        data = load_data()
+    u_id = str(message.from_user.id)
+    topics = load_data()
 
-        # ადმინის პასუხი
-        if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
-            for user_id, t_id in data.get("topics", {}).items():
-                if t_id == message.message_thread_id:
-                    bot.send_message(user_id, message.text)
-                    return
+    # ადმინის პასუხი
+    if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
+        for user_id, t_id in topics.items():
+            if t_id == message.message_thread_id:
+                bot.send_message(user_id, message.text)
+                return
 
-        # იუზერის ჩატი
-        if u_id in data.get("topics", {}):
-            t_id = data["topics"][u_id]
-            if t_id:
-                try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
-                except: pass
-            
-            bot.send_chat_action(message.chat.id, 'typing')
-            response = get_ai_response(message.text, message.chat.id)
-            
-            bot.reply_to(message, response)
-            
-            if t_id:
-                try: bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
-                except: pass
-        else:
-            start(message)
-            
-    except Exception as e:
-        bot.send_message(message.chat.id, f"Error: {e}")
+    # იუზერის ჩატი
+    if u_id in topics:
+        t_id = topics[u_id]
+        
+        # ადმინთან გაგზავნა
+        if t_id:
+            try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
+            except: pass
+        
+        bot.send_chat_action(message.chat.id, 'typing')
+        response = get_ai_response(message.text, message.chat.id)
+        
+        bot.reply_to(message, response)
+        
+        # AI პასუხის ადმინთან გაგზავნა
+        if t_id:
+            try: bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
+            except: pass
+    else:
+        # თუ მეხსიერებაში არ არის, თავიდან ვთხოვთ (მაგრამ წესით RAM-ში უნდა იყოს)
+        start(message)
 
 if __name__ == '__main__':
     while True:
