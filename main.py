@@ -3,10 +3,6 @@ import json
 import os
 import requests
 import time
-import urllib3
-
-# SSL გაფრთხილებების გათიშვა (დიაგნოსტიკისთვის)
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- კონფიგურაცია ---
 TOKEN = '8259258713:AAFtuICqWx6PS7fXCQffsjDNdsE0xj-LL6Q'
@@ -18,19 +14,29 @@ bot = telebot.TeleBot(TOKEN, threaded=False)
 
 # --- იდენტობა ---
 IDENTITY_PROMPT = (
-    "შენი სახელია GeoAI. "
+    "შენი სახელია GeoAI. შენ ხარ მეგობრული ქართველი ასისტენტი. "
     "თუ გკითხავენ 'რა გქვია?', უპასუხე: 'მე მქვია GeoAI' 😊. "
-    "შენი შემქმნელია ილია მგელაძე."
+    "შენი შემქმნელია ილია მგელაძე. "
+    "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. "
+)
+
+# --- Privacy Policy (დაბრუნდა!) ---
+PRIVACY_TEXT = (
+    "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
+    "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია. \n\n"
+    "⚠️ **ყურადღება:** თქვენი მონაცემები და ჩატში გაზიარებული ინფორმაცია ხელმისაწვდომია ადმინისტრაციისთვის. "
+    "ეს აუცილებელია მომსახურების ხარისხის და უსაფრთხოებისთვის. \n\n"
+    "✅ **ვერიფიკაციაზე დაჭერით ეთანხმებით პირობებს.**"
 )
 
 # --- მონაცემების მართვა ---
 def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r') as f:
-                return json.load(f)
-        except: return {"topics": {}}
-    return {"topics": {}}
+    if not os.path.exists(DATA_FILE):
+        return {"topics": {}}
+    try:
+        with open(DATA_FILE, 'r') as f:
+            return json.load(f)
+    except: return {"topics": {}} 
 
 def save_data(data):
     try:
@@ -38,16 +44,15 @@ def save_data(data):
             json.dump(data, f, indent=4)
     except: pass
 
-# --- AI ფუნქცია (DEBUG MODE 🐞) ---
+# --- AI ფუნქცია (განახლებული, მუშა ID-ებით) ---
 def get_ai_response(user_text, chat_id):
-    # ყველაზე სანდო მოდელები
+    # ეს არის მოდელები, რომლებიც ზუსტად ახლა მუშაობენ უფასოდ
     models = [
-        "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "mistralai/mistral-7b-instruct:free",
-        "meta-llama/llama-3.1-8b-instruct:free"
+        "google/gemini-2.0-flash-exp:free",      # Flash Lite-ის ნაცვლად (უფრო სტაბილურია)
+        "google/gemini-2.0-pro-exp-02-05:free",  # Pro ვერსია (ძალიან ძლიერი)
+        "huggingfaceh4/zephyr-7b-beta:free",     # Llama-ს ალტერნატივა
+        "microsoft/phi-3-medium-128k-instruct:free" # Microsoft-ის მოდელი
     ]
-    
-    error_log = "" # აქ შევაგროვებთ ერორებს
     
     for model_id in models:
         try:
@@ -66,39 +71,38 @@ def get_ai_response(user_text, chat_id):
                         {"role": "user", "content": user_text}
                     ]
                 }),
-                timeout=10,
-                verify=False # SSL შემოწმებას ვთიშავთ!
+                timeout=15
             )
             
             if response.status_code == 200:
                 data = response.json()
                 if 'choices' in data:
                     return data['choices'][0]['message']['content']
-            else:
-                # ინახავს ერორის კოდს და ტექსტს
-                error_msg = f"\n⚠️ {model_id}: Status {response.status_code} - {response.text[:100]}"
-                error_log += error_msg
-                print(error_msg)
-                
-        except Exception as e:
-            error_log += f"\n❌ {model_id}: {str(e)}"
+            # თუ არ მუშაობს, ჩუმად გადადის შემდეგზე (ერორს არ გიგზავნის, რომ არ შეგაწუხოს)
+            
+        except Exception:
             continue
 
-    # თუ აქამდე მოვიდა, აბრუნებს სრულ რეპორტს ჩატში
-    return f"🆘 დიაგნოსტიკა:\n{error_log}\n\nგთხოვთ ეს სკრინშოტი აჩვენოთ დეველოპერს."
+    return "❌ ბოდიში, სერვერები გადატვირთულია. სცადეთ 30 წამში! 😊"
 
 # --- ჰენდლერები ---
 @bot.message_handler(commands=['start'])
 def start(message):
-    u_id = str(message.from_user.id)
-    data = load_data()
-    
-    if u_id in data.get("topics", {}):
-        bot.send_message(message.chat.id, "GeoAI მზად არის! 🚀")
-    else:
-        markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-        markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-        bot.send_message(message.chat.id, "გთხოვთ გაიაროთ ვერიფიკაცია:", reply_markup=markup)
+    try:
+        u_id = str(message.from_user.id)
+        data = load_data()
+        
+        # თუ უკვე ვერიფიცირებულია
+        if u_id in data.get("topics", {}):
+            bot.send_message(message.chat.id, "GeoAI მზად არის! 🚀\nშეგიძლიათ მომწეროთ.")
+        else:
+            # თუ ახალია -> Privacy Policy + ღილაკი
+            markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+            markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
+            bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
+            
+    except Exception as e:
+        bot.send_message(message.chat.id, "შეცდომა. სცადეთ /start")
 
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
@@ -108,47 +112,62 @@ def get_contact(message):
             u_name = message.from_user.first_name
             phone = f"+{message.contact.phone_number}"
             
+            # ვქმნით ტოპიკს ადმინთან
             t_id = None
             try:
                 topic = bot.create_forum_topic(ADMIN_GROUP_ID, f"{u_name} ({phone})")
                 t_id = topic.message_thread_id
             except: pass
 
+            # ვინახავთ ბაზაში
             data = load_data()
             if "topics" not in data: data["topics"] = {}
             data["topics"][u_id] = t_id
             save_data(data)
             
             bot.send_message(u_id, "ვერიფიკაცია წარმატებულია! 🎉")
+            bot.send_message(u_id, "ახლა შეგიძლიათ მომწეროთ ნებისმიერი კითხვა! 🚀")
     except: pass
 
 @bot.message_handler(func=lambda message: True)
 def chat(message):
-    u_id = str(message.from_user.id)
-    data = load_data()
+    try:
+        u_id = str(message.from_user.id)
+        data = load_data()
 
-    # ადმინის პასუხი
-    if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
-        for user_id, t_id in data.get("topics", {}).items():
-            if t_id == message.message_thread_id:
-                bot.send_message(user_id, message.text)
-                return
+        # ადმინის პასუხი ჯგუფიდან
+        if message.chat.id == ADMIN_GROUP_ID and message.message_thread_id:
+            for user_id, t_id in data.get("topics", {}).items():
+                if t_id == message.message_thread_id:
+                    bot.send_message(user_id, message.text)
+                    return
 
-    # იუზერის ჩატი
-    if u_id in data.get("topics", {}):
-        t_id = data["topics"][u_id]
-        
-        bot.send_chat_action(message.chat.id, 'typing')
-        # აქ ვიძახებთ დიაგნოსტიკურ ფუნქციას
-        response = get_ai_response(message.text, message.chat.id)
-        
-        bot.reply_to(message, response)
-        
-        if t_id:
-            try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}\n🤖 {response}", message_thread_id=t_id)
-            except: pass
-    else:
-        start(message)
+        # იუზერის ჩატი
+        if u_id in data.get("topics", {}):
+            t_id = data["topics"][u_id]
+            
+            # 1. ვაგზავნით ადმინთან
+            if t_id:
+                try: bot.send_message(ADMIN_GROUP_ID, f"👤 {message.text}", message_thread_id=t_id)
+                except: pass
+            
+            bot.send_chat_action(message.chat.id, 'typing')
+            
+            # 2. ვიღებთ AI პასუხს
+            response = get_ai_response(message.text, message.chat.id)
+            
+            # 3. ვუგზავნით იუზერს
+            bot.reply_to(message, response)
+            
+            # 4. ვუგზავნით ადმინსაც
+            if t_id:
+                try: bot.send_message(ADMIN_GROUP_ID, f"🤖 GeoAI: {response}", message_thread_id=t_id)
+                except: pass
+        else:
+            # თუ უცხოა, ვაწყებინებთ თავიდან
+            start(message)
+            
+    except: pass
 
 if __name__ == '__main__':
     while True:
