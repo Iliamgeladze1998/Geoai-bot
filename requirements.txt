@@ -1,4 +1,2 @@
 pyTelegramBotAPI
-g4f
 requests
-curl_cffi
