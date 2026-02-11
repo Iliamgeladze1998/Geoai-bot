@@ -1,7 +1,6 @@
 import telebot
 import json
 import os
-import time
 import g4f
 
 # --- შენი ახალი ტოკენი ---
@@ -11,7 +10,7 @@ DATA_FILE = 'bot_data.json'
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
-# --- იდენტობა (შემქმნელის სრული ინფო) ---
+# --- იდენტობა ---
 IDENTITY_PROMPT = (
     "შენი სახელია GeoAI. შენ ხარ მეგობრული ქართველი ასისტენტი. "
     "თუ გკითხავენ 'რა გქვია?', უპასუხე: 'მე მქვია GeoAI' 😊. "
@@ -21,11 +20,11 @@ IDENTITY_PROMPT = (
     "საკონტაქტო მეილი: mgeladzeilia39@gmail.com. "
 )
 
-# --- განახლებული კონფიდენციალურობის პოლიტიკა ---
+# --- Privacy Policy ---
 PRIVACY_TEXT = (
     "ℹ️ **კონფიდენციალურობის პოლიტიკა:**\n\n"
     "ბოტთან საუბრის დასაწყებად აუცილებელია ვერიფიკაცია.\n\n"
-    "⚠️ **გაფრთხილება:** თქვენი ტელეფონის ნომერი და ბოტთან ნებისმიერი მიმოწერა **ხელმისაწვდომია ადმინისტრაციისთვის** (უსაფრთხოებისა და ხარისხის მიზნით).\n\n"
+    "⚠️ **გაფრთხილება:** თქვენი ტელეფონის ნომერი და ბოტთან ნებისმიერი მიმოწერა **ხელმისაწვდომია ადმინისტრაციისთვის**.\n\n"
     "✅ **ღილაკზე „ვერიფიკაცია“ დაჭერით თქვენ ადასტურებთ, რომ ეთანხმებით ამ პირობებს.**"
 )
 
@@ -44,7 +43,7 @@ def save_data(data):
 # --- AI ფუნქცია (G4F - ძველი და სანდო) ---
 def get_ai_response(user_text):
     try:
-        # ავტომატური არჩევა
+        # ეს ავტომატურად პოულობს მუშა მოდელს (GPT-3.5, Llama, etc.)
         response = g4f.ChatCompletion.create(
             model=g4f.models.default,
             messages=[
@@ -56,9 +55,9 @@ def get_ai_response(user_text):
             return response
     except Exception as e:
         print(f"G4F Error: {e}")
-        return "❌ ცოტა დავიღალე, თავიდან მომწერე? 😊"
+        return "❌ კავშირი გაწყდა. თავიდან მომწერე? 😊"
     
-    return "❌ სისტემა გადატვირთულია."
+    return "❌ ვერ გიპასუხე."
 
 # --- ჰენდლერები ---
 @bot.message_handler(commands=['start'])
@@ -73,7 +72,6 @@ def start(message):
         else:
             markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
             markup.add(telebot.types.KeyboardButton(text="ვერიფიკაცია 📲", request_contact=True))
-            # აქ გაეგზავნება განახლებული ტექსტი!
             bot.send_message(message.chat.id, f"{PRIVACY_TEXT}\n\n👇 გაიარეთ ვერიფიკაცია:", reply_markup=markup, parse_mode="Markdown")
     except: pass
 
@@ -125,6 +123,7 @@ def chat(message):
             
             bot.send_chat_action(message.chat.id, 'typing')
             
+            # g4f პასუხი
             response = get_ai_response(message.text)
             bot.reply_to(message, response)
             
